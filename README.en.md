@@ -9,7 +9,7 @@ It is currently aimed at junior to intermediate developers who want a faster way
 
 ## Features
 
-- Search GitHub open issues
+- Search GitHub open issues w/ presets chosen by users
 - Filter by language, label, stars, and update recency
 - Skip issues that already have linked PRs
 - Recommend only unassigned issues by default
@@ -33,6 +33,7 @@ oss-issue-scout search --language python --label "good first issue" --limit 5
 --updated-days        Issue updated within the last N days
 --repo-updated-days   Repository had issue activity within the last N days
 --limit               Number of results, default 10
+--preset              Search issues w/ presets (default, junior, intermediate, senior)
 --format              Output format: table, markdown, json
 ```
 
@@ -43,6 +44,7 @@ oss-issue-scout search --language python
 oss-issue-scout search --language python --label "help wanted" --stars-min 500 --limit 10
 oss-issue-scout search --language python --format json
 oss-issue-scout search --language "C++" --label "good first issue" --repo-updated-days 7
+oss-issue-scout search --language python --preset intermediate --limit 20
 ```
 
 ## Scoring
@@ -62,6 +64,8 @@ The search step filters out:
 - Issues with linked PRs
 - Assigned issues
 - Repositories with fewer than 100 stars
+
+The search will use preset chosen by users. If not chosen, will use the `default` preset
 
 ## Tests
 
