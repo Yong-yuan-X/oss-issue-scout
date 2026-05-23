@@ -19,6 +19,7 @@ def build_parser() -> argparse.ArgumentParser:
     search_parser.add_argument("--updated-days", type=int)
     search_parser.add_argument("--repo-updated-days", type=int)
     search_parser.add_argument("--limit", type=_positive_int, default=10)
+    search_parser.add_argument("--preset", type=str, default="default")
     search_parser.add_argument(
         "--format",
         choices=("table", "markdown", "json"),
@@ -48,7 +49,7 @@ def _run_search(args: argparse.Namespace) -> int:
     except GitHubAPIError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
-    results = score_issues(issues)[: args.limit]
+    results = score_issues(issues, args.preset)[: args.limit]
     print(render_results(results, args.format))
     return 0
 
