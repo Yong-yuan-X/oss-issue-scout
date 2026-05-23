@@ -19,9 +19,31 @@ def score_issue(issue: Issue, preset: dict | None = None) -> ScoredIssue:
     score = 50
     reasons: list[str] = []
     warnings: list[str] = []
-
-    # Need to add code later
     
+    if preset is None:
+        preset = scoring_presets.default
+
+    for factor in preset:
+        if factor == "special_rules":
+            for rule in preset[factor]:
+                if rule.labels_any.intersection(issue.labels) and issue.repo_beginner_issue_count >= rule.repo_beginner_issue_count_min:
+                    score += rule.score_delta
+
+                    if rule.rule_type == "reason":
+                        reasons.append(rule.message)
+                    elif rule.rule_type == "warning":
+                        warnings.append(rule.message)
+
+        else:
+            for rule in preset[factor]:
+                if rule.minimum <= issue.stars <= rule.maximum:
+                    score += rule.score_delta
+
+                    if rule.rule_type == "reason":
+                        reasons.append(rule.message)
+                    elif rule.rule_type == "warning":
+                        warnings.append(rule.message)
+
     return ScoredIssue(
         issue=issue,
         score=max(score, 0),
