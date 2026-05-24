@@ -1,4 +1,4 @@
-# oss-issue-scout
+﻿# oss-issue-scout
 
 [![PyPI](https://img.shields.io/pypi/v/oss-issue-scout.svg)](https://pypi.org/project/oss-issue-scout/)
 
@@ -11,7 +11,7 @@
 
 ## 功能
 
-- 搜索 GitHub open issues
+- 搜索 GitHub open issues，并支持用户选择预设
 - 支持按语言、标签、stars、更新时间过滤
 - 默认跳过已有关联 PR 的 issue
 - 默认只推荐未指派的 issue
@@ -35,6 +35,7 @@ oss-issue-scout search --language python --label "good first issue" --limit 5
 --updated-days        当前 issue 最近多少天内更新过
 --repo-updated-days   issue 所在 repo 最近多少天内有 issue 活动
 --limit               返回数量，默认 10
+--preset              使用预设搜索 issue，可选 default、junior、intermediate、senior
 --format              输出格式：table、markdown、json
 ```
 
@@ -45,6 +46,7 @@ oss-issue-scout search --language python
 oss-issue-scout search --language python --label "help wanted" --stars-min 500 --limit 10
 oss-issue-scout search --language python --format json
 oss-issue-scout search --language "C++" --label "good first issue" --repo-updated-days 7
+oss-issue-scout search --language python --preset intermediate --limit 20
 ```
 
 ## 推荐规则
@@ -64,6 +66,8 @@ oss-issue-scout search --language "C++" --label "good first issue" --repo-update
 - 已 linked PR 的 issues
 - 已指派 assignee 的 issues
 - stars 少于 100 的 repos
+
+搜索会使用用户选择的预设；如果未选择，则使用 `default` 预设。
 
 ## 测试
 

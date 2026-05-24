@@ -34,13 +34,13 @@ def score_issue(issue: Issue, preset: dict | None = None) -> ScoredIssue:
         value = getattr(issue, factor_name)
 
         for rule in rules:
-            if in_range(value, rule.minimum, rule.maximum): # Need fix
+            if in_range(value, rule.minimum, rule.maximum):
                 score += rule.score_delta
 
-            if rule.rule_type == "reason":
-                reasons.append(rule.message)
-            elif rule.rule_type == "warning":
-                warnings.append(rule.message)
+                if rule.rule_type == "reason":
+                    reasons.append(rule.message)
+                elif rule.rule_type == "warning":
+                    warnings.append(rule.message)
 
     for rule in preset["special_rules"]:
         if rule.labels_any.intersection(issue.labels) and issue.repo_beginner_issue_count >= rule.repo_beginner_issue_count_min:
