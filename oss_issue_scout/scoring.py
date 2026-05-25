@@ -64,9 +64,16 @@ def score_issues(issues: list[Issue], preset: str | None = None) -> list[ScoredI
     if preset is None:
         preset_obj = scoring_presets.default
     elif isinstance(preset, str):
+        preset_map = {
+            "default": scoring_presets.default,
+            "junior": scoring_presets.junior,
+            "intermediate": scoring_presets.intermediate,
+            "senior": scoring_presets.senior,
+        }
+
         try:
-            preset_obj = getattr(scoring_presets, preset)
-        except AttributeError as exc:
+            preset_obj = preset_map[preset]
+        except KeyError as exc:
             raise ValueError(f"unknown preset: {preset}") from exc
 
     return sorted(
