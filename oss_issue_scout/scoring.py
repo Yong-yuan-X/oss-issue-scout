@@ -29,7 +29,7 @@ def score_issue(issue: Issue, preset: dict | None = None) -> ScoredIssue:
 
     for factor_name, rules in preset.items():
         if factor_name == "special_rules":
-            break
+            continue
 
         value = getattr(issue, factor_name)
 
