@@ -19,7 +19,7 @@ def build_parser() -> argparse.ArgumentParser:
     search_parser.add_argument("--updated-days", type=int)
     search_parser.add_argument("--repo-updated-days", type=int)
     search_parser.add_argument("--limit", type=_positive_int, default=10)
-    search_parser.add_argument("--preset", type=str, default="default")
+    search_parser.add_argument("--preset", choices=["default", "junior", "intermediate", "senior"], default="default")
     search_parser.add_argument(
         "--format",
         choices=("table", "markdown", "json"),
