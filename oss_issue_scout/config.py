@@ -5,9 +5,10 @@ import os
 
 GITHUB_TOKEN_ENV = "GITHUB_TOKEN"
 DEBUG_ENV = "OSS_ISSUE_SCOUT_DEBUG"
+DEBUG_TRUE_VALUES = {"1", "true", "yes", "on"}
 
 GITHUB_TOKEN = os.environ.get(GITHUB_TOKEN_ENV)
-DEBUG_ENABLED = bool(os.environ.get(DEBUG_ENV))
+DEBUG_ENABLED = os.environ.get(DEBUG_ENV, "").strip().casefold() in DEBUG_TRUE_VALUES
 
 GITHUB_API_BASE = "https://api.github.com"
 GITHUB_GRAPHQL_URL = "https://api.github.com/graphql"
