@@ -15,6 +15,7 @@ class ScoreRule:
     message: str
     rule_type: RuleType
 
+
 @dataclass(frozen=True)
 class SpecialRule:
     labels_any: set[str]
@@ -24,7 +25,7 @@ class SpecialRule:
     rule_type: RuleType
 
 
-#Presets
+# Presets
 default = {
     "stars": [
         ScoreRule(

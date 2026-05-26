@@ -26,27 +26,40 @@ pip install oss-issue-scout
 oss-issue-scout search --language python --label "good first issue" --limit 5
 ```
 
+建议用 GitHub token，这样比匿名搜索快3倍且不容易遇到限流，可以先设置环境变量：
+
+```powershell
+$env:GITHUB_TOKEN="your_github_token"
+```
+
+```powershell
+oss-issue-scout search --language python --limit 5
+```
+
+该示例大约 15 秒返回结果
+
 ## 参数
 
 ```text
---language            仓库主要语言，例如 python
---stars-min           仓库最低 stars，默认至少 100
---label               issue 标签，例如 "good first issue"
---updated-days        当前 issue 最近多少天内更新过
---repo-updated-days   issue 所在 repo 最近多少天内有 issue 活动
---limit               返回数量，默认 10
---preset              使用预设搜索 issue，可选 default、junior、intermediate、senior
---format              输出格式：table、markdown、json
+--language            仓库主要语言，例如 python、c++；默认不限制语言
+--stars-min           仓库最低 stars；默认至少 100
+--label               issue 标签，例如 "good first issue"、"bug"；默认不限制标签
+--updated-days        当前 issue 最近多少天内更新过；默认不限制
+--repo-updated-days   issue 所在 repo 最近多少天内有 issue 活动；默认不限制
+--limit               返回数量；默认 6
+--preset              使用预设搜索 issue，可选 default、junior、intermediate、senior；默认 default
+--format              输出格式：table、markdown、json；默认 table
 ```
 
 示例：
 
 ```powershell
+oss-issue-scout search
 oss-issue-scout search --language python
-oss-issue-scout search --language python --label "help wanted" --stars-min 500 --limit 10
-oss-issue-scout search --language python --format json
+oss-issue-scout search --language python --label "help wanted" --stars-min 500 --limit 5
+oss-issue-scout search --language rust --format json
 oss-issue-scout search --language "C++" --label "good first issue" --repo-updated-days 7
-oss-issue-scout search --language python --preset intermediate --limit 20
+oss-issue-scout search --language c --preset intermediate --limit 10
 ```
 
 ## 推荐规则
@@ -61,10 +74,10 @@ oss-issue-scout search --language python --preset intermediate --limit 20
 
 搜索阶段会直接排除：
 
-- closed issues
-- archived repos
+- 关闭的 issues
+- 已归档的 repos
 - 已 linked PR 的 issues
-- 已指派 assignee 的 issues
+- 已指派的 issues
 - stars 少于 100 的 repos
 
 搜索会使用用户选择的预设；如果未选择，则使用 `default` 预设。

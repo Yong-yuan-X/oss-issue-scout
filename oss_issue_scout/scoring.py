@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .github_api import Issue
 from . import scoring_presets
+from .github_api import Issue
 
 
 @dataclass(frozen=True)
@@ -14,16 +14,15 @@ class ScoredIssue:
     warnings: tuple[str, ...]
 
 
-def in_range(value: int, min: int, max: int | None):
-    return min <= value and (max is None or value <= max)
+def in_range(value: int, minimum: int, maximum: int | None) -> bool:
+    return minimum <= value and (maximum is None or value <= maximum)
 
 
 def score_issue(issue: Issue, preset: dict | None = None) -> ScoredIssue:
-
     score = 50
     reasons: list[str] = []
     warnings: list[str] = []
-    
+
     if preset is None:
         preset = scoring_presets.default
 
@@ -43,7 +42,10 @@ def score_issue(issue: Issue, preset: dict | None = None) -> ScoredIssue:
                     warnings.append(rule.message)
 
     for rule in preset["special_rules"]:
-        if rule.labels_any.intersection(issue.labels) and issue.repo_beginner_issue_count >= rule.repo_beginner_issue_count_min:
+        if (
+            rule.labels_any.intersection(issue.labels)
+            and issue.repo_beginner_issue_count >= rule.repo_beginner_issue_count_min
+        ):
             score += rule.score_delta
 
             if rule.rule_type == "reason":
@@ -57,8 +59,6 @@ def score_issue(issue: Issue, preset: dict | None = None) -> ScoredIssue:
         reasons=tuple(reasons),
         warnings=tuple(warnings),
     )
-
-
 
 def score_issues(issues: list[Issue], preset: str | None = None) -> list[ScoredIssue]:
     if preset is None:

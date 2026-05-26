@@ -9,7 +9,7 @@ It is currently aimed at junior to intermediate developers who want a faster way
 
 ## Features
 
-- Search GitHub open issues w/ presets chosen by users
+- Search GitHub open issues with selectable scoring presets
 - Filter by language, label, stars, and update recency
 - Skip issues that already have linked PRs
 - Recommend only unassigned issues by default
@@ -24,27 +24,40 @@ pip install oss-issue-scout
 oss-issue-scout search --language python --label "good first issue" --limit 5
 ```
 
+Using a GitHub token is recommended. It can be about 3x faster than anonymous search and is less likely to hit rate limits. Set it as an environment variable first:
+
+```powershell
+$env:GITHUB_TOKEN="your_github_token"
+```
+
+```powershell
+oss-issue-scout search --language python --limit 5
+```
+
+This example usually returns results in about 15 seconds.
+
 ## Options
 
 ```text
---language            Repository primary language, such as python
+--language            Repository primary language, such as python or c++; default: no language filter
 --stars-min           Minimum repository stars; defaults to at least 100
---label               Issue label, such as "good first issue"
---updated-days        Issue updated within the last N days
---repo-updated-days   Repository had issue activity within the last N days
---limit               Number of results, default 10
---preset              Search issues w/ presets (default, junior, intermediate, senior)
---format              Output format: table, markdown, json
+--label               Issue label, such as "good first issue" or "bug"; default: no label filter
+--updated-days        Issue updated within the last N days; default: no limit
+--repo-updated-days   Repository had issue activity within the last N days; default: no limit
+--limit               Number of results, default 6
+--preset              Scoring preset: default, junior, intermediate, senior; default: default
+--format              Output format: table, markdown, json; default: table
 ```
 
 Examples:
 
 ```powershell
+oss-issue-scout search
 oss-issue-scout search --language python
-oss-issue-scout search --language python --label "help wanted" --stars-min 500 --limit 10
-oss-issue-scout search --language python --format json
+oss-issue-scout search --language python --label "help wanted" --stars-min 500 --limit 5
+oss-issue-scout search --language rust --format json
 oss-issue-scout search --language "C++" --label "good first issue" --repo-updated-days 7
-oss-issue-scout search --language python --preset intermediate --limit 20
+oss-issue-scout search --language c --preset intermediate --limit 10
 ```
 
 ## Scoring
@@ -65,7 +78,7 @@ The search step filters out:
 - Assigned issues
 - Repositories with fewer than 100 stars
 
-The search will use preset chosen by users. If not chosen, will use the `default` preset
+Search uses the selected scoring preset. If not specified, it uses the `default` preset.
 
 ## Tests
 
