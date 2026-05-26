@@ -221,43 +221,63 @@ class CliTests(unittest.TestCase):
         self.assertIn("High score", output)
         self.assertIn("Backfilled low score", output)
 
-    def test_search_uses_low_scores_after_deep_search_when_more_pages_may_exist(self) -> None:
+    def test_search_deepens_by_page_steps_before_using_low_scores(self) -> None:
         stdout = io.StringIO()
 
-        with patch(
-            "oss_issue_scout.cli.search_issue_candidates",
-            side_effect=[
-                IssueSearchResult(
-                    issues=[
-                        _issue("High score"),
-                        _issue(
-                            "Low score",
-                            low_score=True,
-                            repo="example/other",
-                        ),
-                    ],
-                    exhausted=False,
-                ),
-                IssueSearchResult(
-                    issues=[
-                        _issue("High score"),
-                        _issue(
-                            "Low score",
-                            low_score=True,
-                            repo="example/other",
-                        ),
-                    ],
-                    exhausted=False,
-                    page_limit_reached=True,
-                ),
-            ],
-        ) as search, contextlib.redirect_stdout(stdout):
+        with (
+            patch("oss_issue_scout.cli.RECOMMENDATION_SEARCH_PAGE_STEPS", (1, 3)),
+            patch(
+                "oss_issue_scout.cli.search_issue_candidates",
+                side_effect=[
+                    IssueSearchResult(
+                        issues=[
+                            _issue("High score"),
+                            _issue(
+                                "Low score",
+                                low_score=True,
+                                repo="example/other",
+                            ),
+                        ],
+                        exhausted=False,
+                    ),
+                    IssueSearchResult(
+                        issues=[
+                            _issue("High score"),
+                            _issue(
+                                "Low score",
+                                low_score=True,
+                                repo="example/other",
+                            ),
+                        ],
+                        exhausted=False,
+                        page_limit_reached=True,
+                    ),
+                    IssueSearchResult(
+                        issues=[
+                            _issue("High score"),
+                            _issue(
+                                "Low score",
+                                low_score=True,
+                                repo="example/other",
+                            ),
+                        ],
+                        exhausted=False,
+                        page_limit_reached=True,
+                    ),
+                ],
+            ) as search,
+            contextlib.redirect_stdout(stdout),
+        ):
             exit_code = main(["search", "--limit", "2"])
 
         self.assertEqual(exit_code, 0)
         self.assertEqual(
             [call.kwargs["limit"] for call in search.call_args_list],
-            [4, 500],
+            [4, 500, 500],
+        )
+        self.assertEqual(
+            [call.kwargs.get("max_pages") for call in search.call_args_list],
+            [None, 1, 3],
         )
         output = stdout.getvalue()
         self.assertIn("High score", output)

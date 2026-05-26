@@ -14,10 +14,13 @@ from .config import (
     MAX_CANDIDATE_LIMIT,
     MAX_USER_LIMIT,
     MIN_RECOMMENDED_SCORE,
+    RECOMMENDATION_SEARCH_PAGE_SIZE,
+    RECOMMENDATION_SEARCH_PAGE_STEPS,
 )
 from .github_api import (
     GitHubAPIError,
     Issue,
+    IssueSearchResult,
     backfill_issue_candidates,
     search_issue_candidates,
 )
@@ -71,54 +74,93 @@ def _run_search(args: argparse.Namespace) -> int:
 
 def _search_recommended(args: argparse.Namespace) -> list[ScoredIssue]:
     candidate_limit = min(args.limit * CANDIDATE_MULTIPLIER, MAX_CANDIDATE_LIMIT)
-    candidate_limits = [candidate_limit]
-    if candidate_limit < MAX_CANDIDATE_LIMIT:
-        candidate_limits.append(MAX_CANDIDATE_LIMIT)
     issues_by_url: dict[str, Issue] = {}
 
-    for candidate_limit in candidate_limits:
+    search_result = search_issue_candidates(
+        language=args.language,
+        stars_min=args.stars_min,
+        label=args.label,
+        updated_days=args.updated_days,
+        repo_updated_days=args.repo_updated_days,
+        limit=candidate_limit,
+    )
+    selected_results = _select_search_results(
+        args=args,
+        search_result=search_result,
+        issues_by_url=issues_by_url,
+        allow_low_scores=(
+            search_result.page_limit_reached
+            or len(search_result.issues) >= MAX_CANDIDATE_LIMIT
+        ),
+    )
+    if selected_results is not None:
+        return selected_results
+
+    for index, max_pages in enumerate(RECOMMENDATION_SEARCH_PAGE_STEPS):
         search_result = search_issue_candidates(
             language=args.language,
             stars_min=args.stars_min,
             label=args.label,
             updated_days=args.updated_days,
             repo_updated_days=args.repo_updated_days,
-            limit=candidate_limit,
+            limit=MAX_CANDIDATE_LIMIT,
+            max_pages=max_pages,
+            page_size=RECOMMENDATION_SEARCH_PAGE_SIZE,
         )
-        for issue in search_result.issues:
-            issues_by_url.setdefault(issue.url, issue)
-
-        scored_results = score_issues(list(issues_by_url.values()), args.preset)
-        recommended_results = _select_results(
-            scored_results,
-            limit=args.limit,
-            allow_low_scores=False,
+        is_final_step = index == len(RECOMMENDATION_SEARCH_PAGE_STEPS) - 1
+        selected_results = _select_search_results(
+            args=args,
+            search_result=search_result,
+            issues_by_url=issues_by_url,
+            allow_low_scores=is_final_step,
         )
-        if len(recommended_results) >= args.limit:
-            return recommended_results
-
-        if search_result.exhausted:
-            backfill_results = _backfill_recommendations(
-                args=args,
-                issues_by_url=issues_by_url,
-            )
-            if len(backfill_results) >= args.limit:
-                return backfill_results
-            scored_results = score_issues(list(issues_by_url.values()), args.preset)
-
-        allow_low_scores = (
-            search_result.exhausted
-            or search_result.page_limit_reached
-            or len(search_result.issues) >= MAX_CANDIDATE_LIMIT
-        )
-        if allow_low_scores:
-            return _select_results(
-                scored_results,
-                limit=args.limit,
-                allow_low_scores=True,
-            )
+        if selected_results is not None:
+            return selected_results
 
     return []
+
+
+def _select_search_results(
+    *,
+    args: argparse.Namespace,
+    search_result: IssueSearchResult,
+    issues_by_url: dict[str, Issue],
+    allow_low_scores: bool,
+) -> list[ScoredIssue] | None:
+    for issue in search_result.issues:
+        issues_by_url.setdefault(issue.url, issue)
+
+    scored_results = score_issues(list(issues_by_url.values()), args.preset)
+    recommended_results = _select_results(
+        scored_results,
+        limit=args.limit,
+        allow_low_scores=False,
+    )
+    if len(recommended_results) >= args.limit:
+        return recommended_results
+
+    if search_result.exhausted:
+        backfill_results = _backfill_recommendations(
+            args=args,
+            issues_by_url=issues_by_url,
+        )
+        if len(backfill_results) >= args.limit:
+            return backfill_results
+        scored_results = score_issues(list(issues_by_url.values()), args.preset)
+        allow_low_scores = True
+
+    if allow_low_scores and (
+        search_result.exhausted
+        or search_result.page_limit_reached
+        or len(issues_by_url) >= MAX_CANDIDATE_LIMIT
+    ):
+        return _select_results(
+            scored_results,
+            limit=args.limit,
+            allow_low_scores=True,
+        )
+
+    return None
 
 
 def _backfill_recommendations(

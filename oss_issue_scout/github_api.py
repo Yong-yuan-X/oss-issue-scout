@@ -136,6 +136,8 @@ def search_issue_candidates(
     updated_days: int | None = None,
     repo_updated_days: int | None = None,
     limit: int = 10,
+    max_pages: int | None = None,
+    page_size: int | None = None,
 ) -> IssueSearchResult:
     if GITHUB_TOKEN:
         try:
@@ -146,6 +148,8 @@ def search_issue_candidates(
                 updated_days=updated_days,
                 repo_updated_days=repo_updated_days,
                 limit=limit,
+                max_pages=max_pages,
+                page_size=page_size,
             )
         except GitHubAPIError as error:
             if not _is_graphql_resource_limit_error(error):
@@ -159,6 +163,8 @@ def search_issue_candidates(
         updated_days=updated_days,
         repo_updated_days=repo_updated_days,
         limit=limit,
+        max_pages=max_pages,
+        page_size=page_size,
     )
 
 
@@ -245,8 +251,10 @@ def _search_issue_candidates_graphql(
     updated_days: int | None = None,
     repo_updated_days: int | None = None,
     limit: int = 10,
+    max_pages: int | None = None,
+    page_size: int | None = None,
 ) -> IssueSearchResult:
-    if limit <= 0:
+    if limit <= 0 or (max_pages is not None and max_pages <= 0):
         return IssueSearchResult(issues=[], exhausted=True)
 
     effective_stars_min = max(stars_min or DEFAULT_STARS_MIN, DEFAULT_STARS_MIN)
@@ -260,10 +268,11 @@ def _search_issue_candidates_graphql(
     issues: list[Issue] = []
     skipped: Counter[str] = Counter()
     exhausted = False
-    page_size = min(max(limit * 10, 30), MAX_GRAPHQL_PAGE_SIZE)
+    page_size = min(max(page_size or max(limit * 10, 30), 1), MAX_GRAPHQL_PAGE_SIZE)
     cursor: str | None = None
     search_started = perf_counter()
-    max_pages = MAX_GRAPHQL_SEARCH_PAGES
+    allow_page_extension = max_pages is None
+    max_pages = max_pages or MAX_GRAPHQL_SEARCH_PAGES
     _debug(
         f"graphql search start query={query!r} limit={limit} "
         f"page_size={page_size} max_pages={max_pages}"
@@ -326,7 +335,7 @@ def _search_issue_candidates_graphql(
             break
         if len(issues) >= limit:
             break
-        if _should_extend_search_pages(
+        if allow_page_extension and _should_extend_search_pages(
             page=page,
             base_max_pages=MAX_GRAPHQL_SEARCH_PAGES,
             max_pages=max_pages,
@@ -390,8 +399,10 @@ def _search_issue_candidates_rest(
     updated_days: int | None = None,
     repo_updated_days: int | None = None,
     limit: int = 10,
+    max_pages: int | None = None,
+    page_size: int | None = None,
 ) -> IssueSearchResult:
-    if limit <= 0:
+    if limit <= 0 or (max_pages is not None and max_pages <= 0):
         return IssueSearchResult(issues=[], exhausted=True)
 
     effective_stars_min = max(stars_min or DEFAULT_STARS_MIN, DEFAULT_STARS_MIN)
@@ -408,9 +419,10 @@ def _search_issue_candidates_rest(
     issues: list[Issue] = []
     skipped: Counter[str] = Counter()
     exhausted = False
-    per_page = min(max(limit * 10, 30), 100)
+    per_page = min(max(page_size or max(limit * 10, 30), 1), 100)
     search_started = perf_counter()
-    max_pages = MAX_REST_SEARCH_PAGES
+    allow_page_extension = max_pages is None
+    max_pages = max_pages or MAX_REST_SEARCH_PAGES
     _debug(
         f"rest search start query={query!r} limit={limit} per_page={per_page} "
         f"max_pages={max_pages} repo_workers={MAX_REPO_WORKERS}"
@@ -462,7 +474,7 @@ def _search_issue_candidates_rest(
 
             if len(issues) >= limit:
                 break
-            if _should_extend_search_pages(
+            if allow_page_extension and _should_extend_search_pages(
                 page=page,
                 base_max_pages=MAX_REST_SEARCH_PAGES,
                 max_pages=max_pages,
