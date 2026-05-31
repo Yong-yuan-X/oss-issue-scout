@@ -1,6 +1,7 @@
 # oss-issue-scout
 
 [![PyPI](https://img.shields.io/pypi/v/oss-issue-scout.svg)](https://pypi.org/project/oss-issue-scout/)
+[![Web App](https://img.shields.io/badge/Web%20App-Open-2ea44f)](https://yong-yuan-x.github.io/oss-issue-scout/)
 
 Find worthwhile open-source issues
 
@@ -37,6 +38,12 @@ oss-issue-scout search --language python --limit 5
 This example usually returns results in about 15 seconds.
 
 ## Web UI
+
+Open the hosted web app directly:
+
+https://yong-yuan-x.github.io/oss-issue-scout/
+
+The GitHub Pages version calls the GitHub API directly from your browser. The optional GitHub token is only sent to `api.github.com` and is not stored by the page.
 
 Install the optional web dependencies before running the local web UI:
 

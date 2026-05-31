@@ -1386,8 +1386,10 @@ const translations = {
     'search-token': 'GitHub Token（可选）',
     'search-button': '搜索',
     'results-count': '找到 {count} 个结果',
+    'results-empty': '没有找到匹配的 Issue，可以放宽标签、Stars 或更新时间筛选。',
     'loading-text': '正在搜索 GitHub Issues',
-    'error-connect': '无法连接到服务器，请确保后端服务已启动',
+    'error-github': 'GitHub API 请求失败，请稍后重试或填写 GitHub Token。',
+    'error-connect': '无法连接到搜索服务，请稍后重试或填写 GitHub Token。',
     'footer-text': 'Made with ❤️ for open source contributors'
   },
   en: {
@@ -1450,8 +1452,10 @@ const translations = {
     'search-token': 'GitHub Token (Optional)',
     'search-button': 'Search',
     'results-count': '{count} results found',
+    'results-empty': 'No matching issues found. Try relaxing the label, stars, or recency filters.',
     'loading-text': 'Searching GitHub Issues',
-    'error-connect': 'Failed to connect to server, please ensure backend service is running',
+    'error-github': 'GitHub API request failed. Try again later or provide a GitHub token.',
+    'error-connect': 'Failed to reach the search service. Try again later or provide a GitHub token.',
     'footer-text': 'Made with ❤️ for open source contributors'
   }
 };
@@ -1556,7 +1560,13 @@ document.addEventListener('DOMContentLoaded', function() {
     const resultsCount = document.getElementById('results-count');
     
     if (!results || results.length === 0) {
-      resultsWrapper.style.display = 'none';
+      resultsCount.textContent = translations[currentLang]['results-count'].replace('{count}', 0);
+      resultsBody.innerHTML = `
+        <tr><td colspan="6">
+          <div class="results-empty">${translations[currentLang]['results-empty']}</div>
+        </td></tr>
+      `;
+      resultsWrapper.style.display = 'block';
       return;
     }
 
@@ -1657,6 +1667,386 @@ document.addEventListener('DOMContentLoaded', function() {
     ];
   }
 
+  const GITHUB_API_BASE = 'https://api.github.com';
+  const DEFAULT_STARS_MIN = 100;
+  const MIN_RECOMMENDED_SCORE = 85;
+  const STATIC_SEARCH_MAX_CANDIDATES = 50;
+  const STATIC_SEARCH_REPO_BATCH_SIZE = 8;
+  const LOCAL_API_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
+
+  const scoringPresets = {
+    default: {
+      stars: [
+        { min: 500, max: 4999, delta: 5, message: 'somewhat active repo', type: 'reason' },
+        { min: 5000, max: 9999, delta: 10, message: 'moderately active repo', type: 'reason' },
+        { min: 10000, max: 49999, delta: 15, message: 'active repo', type: 'reason' },
+        { min: 50000, max: 99999, delta: -10, message: 'large repo may be competitive', type: 'warning' },
+        { min: 100000, max: null, delta: -15, message: 'very large repo may be competitive', type: 'warning' }
+      ],
+      updated_days: [
+        { min: 0, max: 1, delta: 15, message: 'issue updated today', type: 'reason' },
+        { min: 2, max: 3, delta: 10, message: 'issue updated in the last 3 days', type: 'reason' },
+        { min: 4, max: 14, delta: 5, message: 'issue updated in the last 2 weeks', type: 'reason' },
+        { min: 31, max: null, delta: -20, message: 'issue looks stale', type: 'warning' }
+      ],
+      repo_last_issue_updated_days: [
+        { min: 0, max: 3, delta: 30, message: 'repo issue activity in the last 3 days', type: 'reason' },
+        { min: 4, max: 7, delta: 15, message: 'repo issue activity this week', type: 'reason' },
+        { min: 8, max: 14, delta: -5, message: 'repo issue activity is slowing', type: 'warning' },
+        { min: 15, max: 30, delta: -30, message: 'repo issue activity looks stale', type: 'warning' },
+        { min: 31, max: null, delta: -40, message: 'repo issue activity is stale', type: 'warning' }
+      ],
+      comments: [
+        { min: 0, max: 1, delta: 15, message: 'low discussion volume', type: 'reason' },
+        { min: 5, max: null, delta: -15, message: 'long discussion', type: 'warning' }
+      ],
+      special_rules: [
+        { labelsAny: ['good first issue', 'help wanted'], repoBeginnerIssueCountMin: 3, delta: 10, message: 'welcoming label', type: 'reason' }
+      ]
+    },
+    junior: {
+      stars: [
+        { min: 5, max: 1000, delta: 15, message: 'small beginner-friendly repo', type: 'reason' },
+        { min: 1001, max: null, delta: -5, message: 'repo may be competitive', type: 'warning' }
+      ],
+      updated_days: [
+        { min: 0, max: 14, delta: 15, message: 'issue updated recently', type: 'reason' },
+        { min: 15, max: null, delta: -25, message: 'issue may be stale', type: 'warning' }
+      ],
+      repo_last_issue_updated_days: [
+        { min: 0, max: 14, delta: 25, message: 'repo is actively maintained', type: 'reason' },
+        { min: 15, max: null, delta: -30, message: 'repo activity is slowing or stale', type: 'warning' }
+      ],
+      comments: [
+        { min: 0, max: 2, delta: 20, message: 'ideal discussion volume', type: 'reason' },
+        { min: 3, max: 10, delta: 5, message: 'manageable discussion volume', type: 'reason' },
+        { min: 11, max: null, delta: -40, message: 'issue may be too complex for beginners', type: 'warning' }
+      ],
+      special_rules: [
+        { labelsAny: ['good first issue', 'documentation'], repoBeginnerIssueCountMin: 3, delta: 20, message: 'beginner-friendly label', type: 'reason' },
+        { labelsAny: ['help wanted'], repoBeginnerIssueCountMin: 3, delta: 5, message: 'maintainers welcome contributions', type: 'reason' }
+      ]
+    },
+    intermediate: {
+      stars: [
+        { min: 200, max: 20000, delta: 15, message: 'active repo with manageable scale', type: 'reason' },
+        { min: 20001, max: null, delta: -10, message: 'large repo may be competitive', type: 'warning' }
+      ],
+      updated_days: [
+        { min: 0, max: 21, delta: 15, message: 'issue updated recently', type: 'reason' },
+        { min: 22, max: null, delta: -20, message: 'issue may be stale', type: 'warning' }
+      ],
+      repo_last_issue_updated_days: [
+        { min: 0, max: 21, delta: 25, message: 'repo is actively maintained', type: 'reason' },
+        { min: 22, max: null, delta: -25, message: 'repo activity is slowing', type: 'warning' }
+      ],
+      comments: [
+        { min: 0, max: 3, delta: 20, message: 'low discussion volume', type: 'reason' },
+        { min: 4, max: 10, delta: 5, message: 'moderate discussion volume', type: 'reason' },
+        { min: 11, max: null, delta: -30, message: 'long discussion may indicate complexity', type: 'warning' }
+      ],
+      special_rules: [
+        { labelsAny: ['good first issue', 'documentation', 'enhancement'], repoBeginnerIssueCountMin: 3, delta: 10, message: 'general contribution-friendly issue types', type: 'reason' },
+        { labelsAny: ['help wanted', 'bug'], repoBeginnerIssueCountMin: 3, delta: 20, message: 'maintainers are looking for external help', type: 'reason' }
+      ]
+    },
+    senior: {
+      stars: [
+        { min: 1000, max: null, delta: 10, message: 'active large-scale repo', type: 'reason' }
+      ],
+      updated_days: [
+        { min: 0, max: 30, delta: 15, message: 'issue updated recently', type: 'reason' },
+        { min: 31, max: null, delta: -10, message: 'issue may be stale', type: 'warning' }
+      ],
+      repo_last_issue_updated_days: [
+        { min: 0, max: 60, delta: 20, message: 'repo has healthy activity', type: 'reason' },
+        { min: 61, max: null, delta: -20, message: 'repo activity is stale', type: 'warning' }
+      ],
+      comments: [
+        { min: 0, max: 10, delta: 10, message: 'discussion volume is acceptable', type: 'reason' },
+        { min: 11, max: null, delta: -10, message: 'long discussion may indicate complexity', type: 'warning' }
+      ],
+      special_rules: [
+        { labelsAny: ['help wanted', 'bug', 'enhancement'], repoBeginnerIssueCountMin: 3, delta: 20, message: 'technical issue suitable for experienced contributors', type: 'reason' }
+      ]
+    }
+  };
+
+  function shouldUseLocalApi() {
+    return LOCAL_API_HOSTS.has(window.location.hostname) && window.location.port === '8000';
+  }
+
+  function parsePositiveInteger(value, fallback, maximum) {
+    const parsed = parseInt(value, 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return fallback;
+    }
+    return Math.min(parsed, maximum);
+  }
+
+  function parseNonNegativeInteger(value) {
+    if (value === '' || value === null || value === undefined) {
+      return null;
+    }
+    const parsed = parseInt(value, 10);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+  }
+
+  function inRange(value, minimum, maximum) {
+    return value >= minimum && (maximum === null || value <= maximum);
+  }
+
+  function scoreIssueForPreset(issue, presetName) {
+    const preset = scoringPresets[presetName] || scoringPresets.default;
+    // The static Pages path avoids repo-wide issue metrics to stay within GitHub's browser API limits.
+    const skippedStaticFactors = new Set(['repo_last_issue_updated_days']);
+    let score = 50;
+    const reasons = [];
+    const warnings = [];
+
+    Object.entries(preset).forEach(([factorName, rules]) => {
+      if (factorName === 'special_rules' || skippedStaticFactors.has(factorName)) {
+        return;
+      }
+      const value = Number(issue[factorName] || 0);
+      rules.forEach(rule => {
+        if (inRange(value, rule.min, rule.max)) {
+          score += rule.delta;
+          if (rule.type === 'reason') {
+            reasons.push(rule.message);
+          } else if (rule.type === 'warning') {
+            warnings.push(rule.message);
+          }
+        }
+      });
+    });
+
+    return {
+      ...issue,
+      score: Math.max(score, 0),
+      reasons,
+      warnings
+    };
+  }
+
+  function perRepoResultLimit(limit) {
+    return limit <= 5 ? 1 : Math.floor(limit / 5) + 1;
+  }
+
+  function selectStaticResults(scoredIssues, limit) {
+    function pick(allowLowScores) {
+      const selected = [];
+      const repoCounts = new Map();
+      const repoLimit = perRepoResultLimit(limit);
+
+      for (const issue of scoredIssues) {
+        if (!allowLowScores && issue.score < MIN_RECOMMENDED_SCORE) {
+          continue;
+        }
+        const currentRepoCount = repoCounts.get(issue.repo) || 0;
+        if (currentRepoCount >= repoLimit) {
+          continue;
+        }
+        selected.push(issue);
+        repoCounts.set(issue.repo, currentRepoCount + 1);
+        if (selected.length >= limit) {
+          break;
+        }
+      }
+      return selected;
+    }
+
+    const recommended = pick(false);
+    return recommended.length >= limit ? recommended : pick(true);
+  }
+
+  function quoteQueryValue(value) {
+    const trimmed = String(value || '').trim();
+    if (/^[A-Za-z0-9_-]+$/.test(trimmed)) {
+      return trimmed;
+    }
+    return `"${trimmed.replace(/"/g, '\\"')}"`;
+  }
+
+  function dateDaysAgo(days) {
+    const date = new Date();
+    date.setUTCDate(date.getUTCDate() - days);
+    return date.toISOString().slice(0, 10);
+  }
+
+  function daysSince(value) {
+    if (!value) {
+      return 9999;
+    }
+    const timestamp = new Date(value).getTime();
+    if (!Number.isFinite(timestamp)) {
+      return 9999;
+    }
+    const diffMs = Date.now() - timestamp;
+    return Math.max(Math.floor(diffMs / 86400000), 0);
+  }
+
+  function buildIssueSearchQuery(options) {
+    const parts = ['is:issue', 'is:open', 'archived:false', '-linked:pr', 'no:assignee'];
+    const effectiveStarsMin = Math.max(parsePositiveInteger(options.starsMin, DEFAULT_STARS_MIN, 1000000), DEFAULT_STARS_MIN);
+    const updatedDays = parseNonNegativeInteger(options.updatedDays);
+
+    if (options.query) {
+      parts.push(quoteQueryValue(options.query));
+    }
+    if (options.language) {
+      parts.push(`language:${quoteQueryValue(options.language)}`);
+    }
+    parts.push(`stars:>=${effectiveStarsMin}`);
+    if (options.label) {
+      parts.push(`label:${quoteQueryValue(options.label)}`);
+    }
+    if (updatedDays !== null) {
+      parts.push(`updated:>=${dateDaysAgo(updatedDays)}`);
+    }
+
+    return parts.join(' ');
+  }
+
+  async function githubRequest(url, token) {
+    const headers = {
+      'Accept': 'application/vnd.github+json'
+    };
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+
+    const response = await fetch(url, { headers });
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      const message = data.message || translations[currentLang]['error-github'];
+      if (response.status === 403 && /rate limit/i.test(message)) {
+        throw new Error(translations[currentLang]['error-github']);
+      }
+      throw new Error(message);
+    }
+
+    return data;
+  }
+
+  function repoFromIssueItem(item) {
+    const repositoryUrl = String(item.repository_url || '');
+    const marker = `${GITHUB_API_BASE}/repos/`;
+    if (repositoryUrl.startsWith(marker)) {
+      return repositoryUrl.slice(marker.length);
+    }
+    if (item.repository && item.repository.full_name) {
+      return item.repository.full_name;
+    }
+    return '';
+  }
+
+  async function fetchRepoInfo(repo, token) {
+    const [owner, name] = repo.split('/');
+    if (!owner || !name) {
+      return null;
+    }
+    const url = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`;
+    return githubRequest(url, token);
+  }
+
+  async function mapInBatches(items, batchSize, worker) {
+    const results = [];
+    for (let index = 0; index < items.length; index += batchSize) {
+      const batch = items.slice(index, index + batchSize);
+      const batchResults = await Promise.all(batch.map(worker));
+      results.push(...batchResults);
+    }
+    return results;
+  }
+
+  function issueFromGitHubItem(item, repoInfo) {
+    const repo = repoFromIssueItem(item);
+    if (!repo) {
+      return null;
+    }
+
+    const labels = (item.labels || [])
+      .map(label => label && label.name)
+      .filter(Boolean);
+    const issueUpdatedDays = daysSince(item.updated_at);
+
+    return {
+      repo,
+      title: String(item.title || ''),
+      url: String(item.html_url || ''),
+      language: repoInfo && repoInfo.language ? String(repoInfo.language) : '',
+      stars: repoInfo ? Number(repoInfo.stargazers_count || 0) : 0,
+      labels,
+      updated_days: issueUpdatedDays,
+      repo_last_issue_updated_days: 9999,
+      repo_beginner_issue_count: 0,
+      comments: Number(item.comments || 0)
+    };
+  }
+
+  async function searchWithGitHubApi(options) {
+    const limit = parsePositiveInteger(options.limit, 5, 50);
+    const candidateLimit = Math.min(Math.max(limit * 5, 25), STATIC_SEARCH_MAX_CANDIDATES);
+    const effectiveStarsMin = Math.max(parsePositiveInteger(options.starsMin, DEFAULT_STARS_MIN, 1000000), DEFAULT_STARS_MIN);
+    const searchUrl = new URL(`${GITHUB_API_BASE}/search/issues`);
+    searchUrl.searchParams.set('q', buildIssueSearchQuery(options));
+    searchUrl.searchParams.set('sort', 'updated');
+    searchUrl.searchParams.set('order', 'desc');
+    searchUrl.searchParams.set('per_page', String(candidateLimit));
+
+    const searchData = await githubRequest(searchUrl.toString(), options.token);
+    const candidates = (searchData.items || []).filter(item => !item.pull_request);
+    const repos = [...new Set(candidates.map(repoFromIssueItem).filter(Boolean))];
+    const repoEntries = await mapInBatches(repos, STATIC_SEARCH_REPO_BATCH_SIZE, async repo => {
+      try {
+        return [repo, await fetchRepoInfo(repo, options.token)];
+      } catch (error) {
+        console.warn(`Failed to load repository metadata for ${repo}`, error);
+        return [repo, null];
+      }
+    });
+    const repoInfoByName = new Map(repoEntries);
+
+    const issues = candidates
+      .map(item => issueFromGitHubItem(item, repoInfoByName.get(repoFromIssueItem(item))))
+      .filter(Boolean)
+      .filter(issue => {
+        if (issue.stars > 0 && issue.stars < effectiveStarsMin) {
+          return false;
+        }
+        if (options.language && issue.language && issue.language.toLowerCase() !== options.language.toLowerCase()) {
+          return false;
+        }
+        return true;
+      });
+
+    const scoredIssues = issues
+      .map(issue => scoreIssueForPreset(issue, options.preset))
+      .sort((a, b) => b.score - a.score);
+
+    return selectStaticResults(scoredIssues, limit);
+  }
+
+  async function searchWithLocalApi(options) {
+    const url = new URL('http://localhost:5000/api/search');
+    url.searchParams.set('query', options.query || '');
+    url.searchParams.set('language', options.language || '');
+    url.searchParams.set('label', options.label || '');
+    url.searchParams.set('stars_min', options.starsMin || '100');
+    url.searchParams.set('limit', options.limit || '5');
+    url.searchParams.set('preset', options.preset || 'default');
+    url.searchParams.set('updated_days', options.updatedDays || '');
+
+    const response = await fetch(url.toString());
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || data.error) {
+      throw new Error(data.error || translations[currentLang]['error-connect']);
+    }
+    return data.issues || [];
+  }
+
   async function performSearch() {
     const languagesList = ['python', 'java', 'javascript', 'typescript', 'rust', 'c', 'c++', 'go', 'ruby', 'php', 'swift', 'kotlin', 'dart', 'scala', 'html', 'css', 'sql', 'bash', 'shell', 'perl'];
     
@@ -1689,6 +2079,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const searchSubmit = document.getElementById('search-submit');
     const resultsWrapper = document.getElementById('search-results-wrapper');
     const resultsBody = document.getElementById('search-results-body');
+    const resultsCount = document.getElementById('results-count');
 
     searchSubmit.disabled = true;
     searchSubmit.classList.add('loading');
@@ -1711,40 +2102,37 @@ document.addEventListener('DOMContentLoaded', function() {
     `;
 
     try {
-      const url = new URL('http://localhost:5000/api/search');
-      url.searchParams.set('query', query || '');
-      url.searchParams.set('language', language || '');
-      url.searchParams.set('label', label || '');
-      url.searchParams.set('stars_min', starsMin || '100');
-      url.searchParams.set('limit', limit || '5');
-      url.searchParams.set('preset', preset || 'default');
-      url.searchParams.set('updated_days', updatedDays || '');
-
-      const headers = {};
+      const options = {
+        query,
+        language,
+        label,
+        starsMin,
+        limit,
+        preset,
+        updatedDays,
+        token
+      };
+      let issues;
       if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
+        issues = await searchWithGitHubApi(options);
+      } else if (shouldUseLocalApi()) {
+        try {
+          issues = await searchWithLocalApi(options);
+        } catch (localApiError) {
+          console.warn('Local API unavailable, falling back to GitHub API', localApiError);
+          issues = await searchWithGitHubApi(options);
+        }
+      } else {
+        issues = await searchWithGitHubApi(options);
       }
 
-      const response = await fetch(url.toString(), { headers });
-      const data = await response.json();
-
-      if (data.error) {
-        const errorDiv = document.createElement('div');
-        errorDiv.className = 'results-error';
-        errorDiv.textContent = data.error;
-        resultsBody.innerHTML = `<tr><td colspan="6"></td></tr>`;
-        resultsBody.querySelector('td').appendChild(errorDiv);
-        searchSubmit.disabled = false;
-        searchSubmit.classList.remove('loading');
-        return;
-      }
-
-      renderResults(data.issues || []);
+      renderResults(issues);
     } catch (error) {
       console.error('Search error:', error);
       const errorDiv = document.createElement('div');
       errorDiv.className = 'results-error';
-      errorDiv.textContent = translations[currentLang]['error-connect'];
+      errorDiv.textContent = error.message || translations[currentLang]['error-connect'];
+      resultsCount.textContent = translations[currentLang]['results-count'].replace('{count}', 0);
       resultsBody.innerHTML = `<tr><td colspan="6"></td></tr>`;
       resultsBody.querySelector('td').appendChild(errorDiv);
     } finally {

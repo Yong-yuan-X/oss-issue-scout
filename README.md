@@ -1,6 +1,7 @@
 ﻿# oss-issue-scout
 
 [![PyPI](https://img.shields.io/pypi/v/oss-issue-scout.svg)](https://pypi.org/project/oss-issue-scout/)
+[![Web App](https://img.shields.io/badge/Web%20App-Open-2ea44f)](https://yong-yuan-x.github.io/oss-issue-scout/)
 
 发现值得贡献的开源 issues
 
@@ -39,6 +40,12 @@ oss-issue-scout search --language python --limit 5
 该示例大约 15 秒返回结果
 
 ## Web 页面
+
+可以直接打开在线版：
+
+https://yong-yuan-x.github.io/oss-issue-scout/
+
+GitHub Pages 版本会在浏览器中直接请求 GitHub API。可选的 GitHub Token 只会发送给 `api.github.com`，不会保存到页面里。
 
 本地运行 Web 页面需要安装可选 Web 依赖：
 
