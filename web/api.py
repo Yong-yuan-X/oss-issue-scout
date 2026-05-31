@@ -37,6 +37,7 @@ def search():
         limit = request.args.get('limit', '5')
         preset = request.args.get('preset', 'default')
         updated_days = request.args.get('updated_days', '')
+        repo_updated_days = request.args.get('repo_updated_days', '')
         query = request.args.get('query', '')
         token = request.headers.get('Authorization', '').replace('Bearer ', '')
         
@@ -45,7 +46,7 @@ def search():
         args_obj.stars_min = validate_int(stars_min, 'stars_min')
         args_obj.label = label if label else None
         args_obj.updated_days = validate_int(updated_days, 'updated_days')
-        args_obj.repo_updated_days = None
+        args_obj.repo_updated_days = validate_int(repo_updated_days, 'repo_updated_days')
         args_obj.limit = validate_int(limit, 'limit', min_val=1, max_val=MAX_USER_LIMIT)
         args_obj.preset = preset
         args_obj.format = 'json'

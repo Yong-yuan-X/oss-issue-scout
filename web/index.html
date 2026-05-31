@@ -1025,6 +1025,10 @@
             <label class="setting-label" data-i18n="search-days">更新天数</label>
             <input type="number" id="search-updated-days" class="setting-input" placeholder="不限制">
           </div>
+          <div class="setting-group">
+            <label class="setting-label" data-i18n="search-repo-days">仓库活动天数（本地 API）</label>
+            <input type="number" id="search-repo-updated-days" class="setting-input" placeholder="不限制">
+          </div>
           <div class="setting-group token-input-wrapper">
             <label class="setting-label" data-i18n="search-token">GitHub Token (可选)</label>
             <div style="position: relative;">
@@ -1383,6 +1387,7 @@ const translations = {
     'search-limit': '返回数量',
     'search-preset': '开发者预设',
     'search-days': '更新天数',
+    'search-repo-days': '仓库活动天数（本地 API）',
     'search-token': 'GitHub Token（可选）',
     'search-button': '搜索',
     'results-count': '找到 {count} 个结果',
@@ -1449,6 +1454,7 @@ const translations = {
     'search-limit': 'Results Limit',
     'search-preset': 'Developer Preset',
     'search-days': 'Updated Days',
+    'search-repo-days': 'Repo Activity Days (Local API)',
     'search-token': 'GitHub Token (Optional)',
     'search-button': 'Search',
     'results-count': '{count} results found',
@@ -2038,6 +2044,7 @@ document.addEventListener('DOMContentLoaded', function() {
     url.searchParams.set('limit', options.limit || '5');
     url.searchParams.set('preset', options.preset || 'default');
     url.searchParams.set('updated_days', options.updatedDays || '');
+    url.searchParams.set('repo_updated_days', options.repoUpdatedDays || '');
 
     const response = await fetch(url.toString());
     const data = await response.json().catch(() => ({}));
@@ -2057,6 +2064,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const limit = document.getElementById('search-limit').value;
     const preset = document.getElementById('search-preset').value;
     const updatedDays = document.getElementById('search-updated-days').value;
+    const repoUpdatedDays = document.getElementById('search-repo-updated-days').value;
     const token = document.getElementById('search-token').value;
 
     const lowerQuery = query.toLowerCase().trim();
@@ -2110,6 +2118,7 @@ document.addEventListener('DOMContentLoaded', function() {
         limit,
         preset,
         updatedDays,
+        repoUpdatedDays,
         token
       };
       let issues;
