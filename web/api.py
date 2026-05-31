@@ -4,7 +4,9 @@ import argparse
 import sys
 import os
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+WEB_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(WEB_DIR)
+sys.path.insert(0, PROJECT_ROOT)
 
 from oss_issue_scout.cli import _search_recommended
 from oss_issue_scout.github_api import GitHubAPIError

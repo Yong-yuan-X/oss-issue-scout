@@ -36,6 +36,22 @@ oss-issue-scout search --language python --limit 5
 
 This example usually returns results in about 15 seconds.
 
+## Web UI
+
+Install the optional web dependencies before running the local web UI:
+
+```powershell
+python -m pip install -e ".[web]"
+```
+
+On Windows, start the frontend and backend together with:
+
+```powershell
+.\web\start_web.bat
+```
+
+The script starts the backend API at `http://localhost:5000`, serves the frontend at `http://localhost:8000`, and opens `http://localhost:8000`.
+
 ## Options
 
 ```text

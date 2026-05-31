@@ -55,7 +55,7 @@ class SearchIssuesTests(unittest.TestCase):
 
     def test_searches_github_and_maps_results(self) -> None:
         with (
-            patch("oss_issue_scout.github_api.GITHUB_TOKEN", "token"),
+            patch("oss_issue_scout.github_api._get_token", return_value="token"),
             patch("oss_issue_scout.github_api._request_graphql", side_effect=_fake_graphql),
         ):
             issues = search_issues(language="python", label="good first issue", updated_days=10, limit=5)
@@ -70,7 +70,7 @@ class SearchIssuesTests(unittest.TestCase):
 
     def test_search_without_token_uses_rest_api(self) -> None:
         with (
-            patch("oss_issue_scout.github_api.GITHUB_TOKEN", None),
+            patch("oss_issue_scout.github_api._get_token", return_value=None),
             patch("oss_issue_scout.github_api._request_json", side_effect=_fake_rest),
             patch("oss_issue_scout.github_api._request_graphql") as request_graphql,
         ):
@@ -79,9 +79,30 @@ class SearchIssuesTests(unittest.TestCase):
         self.assertEqual([issue.repo for issue in issues], ["example/project"])
         request_graphql.assert_not_called()
 
+    def test_rest_search_uses_built_issue_query(self) -> None:
+        with (
+            patch("oss_issue_scout.github_api._get_token", return_value=None),
+            patch("oss_issue_scout.github_api._request_json", side_effect=_fake_rest) as request_json,
+        ):
+            search_issue_candidates(
+                query="timeout handling",
+                language="C++",
+                stars_min=500,
+                label="good first issue",
+                updated_days=10,
+                limit=5,
+            )
+
+        params = request_json.call_args_list[0].args[1]
+        self.assertIn('"timeout handling"', params["q"])
+        self.assertIn('language:"C++"', params["q"])
+        self.assertIn("stars:>=500", params["q"])
+        self.assertIn('label:"good first issue"', params["q"])
+        self.assertIn("no:assignee", params["q"])
+
     def test_graphql_search_uses_conservative_page_size(self) -> None:
         with (
-            patch("oss_issue_scout.github_api.GITHUB_TOKEN", "token"),
+            patch("oss_issue_scout.github_api._get_token", return_value="token"),
             patch("oss_issue_scout.github_api._request_graphql", side_effect=_fake_graphql) as request_graphql,
         ):
             search_issues(language="python", limit=20)
@@ -93,7 +114,7 @@ class SearchIssuesTests(unittest.TestCase):
 
     def test_graphql_resource_limit_falls_back_to_rest_api(self) -> None:
         with (
-            patch("oss_issue_scout.github_api.GITHUB_TOKEN", "token"),
+            patch("oss_issue_scout.github_api._get_token", return_value="token"),
             patch(
                 "oss_issue_scout.github_api._request_graphql",
                 side_effect=GitHubAPIError("Resource limits for this query exceeded."),
@@ -130,7 +151,7 @@ class SearchIssuesTests(unittest.TestCase):
 
     def test_filters_by_min_stars_from_graphql_repo_data(self) -> None:
         with (
-            patch("oss_issue_scout.github_api.GITHUB_TOKEN", "token"),
+            patch("oss_issue_scout.github_api._get_token", return_value="token"),
             patch("oss_issue_scout.github_api._request_graphql", side_effect=_fake_graphql),
         ):
             issues = search_issues(stars_min=50_000, limit=5)
@@ -139,7 +160,7 @@ class SearchIssuesTests(unittest.TestCase):
 
     def test_skips_repos_with_fewer_than_default_min_stars(self) -> None:
         with (
-            patch("oss_issue_scout.github_api.GITHUB_TOKEN", "token"),
+            patch("oss_issue_scout.github_api._get_token", return_value="token"),
             patch("oss_issue_scout.github_api._request_graphql", side_effect=_fake_low_star_graphql),
         ):
             issues = search_issues(limit=5)
@@ -148,7 +169,7 @@ class SearchIssuesTests(unittest.TestCase):
 
     def test_filters_by_repo_issue_activity_from_graphql_repo_data(self) -> None:
         with (
-            patch("oss_issue_scout.github_api.GITHUB_TOKEN", "token"),
+            patch("oss_issue_scout.github_api._get_token", return_value="token"),
             patch("oss_issue_scout.github_api._request_graphql", side_effect=_fake_stale_repo_activity),
         ):
             issues = search_issues(repo_updated_days=7, limit=5)
@@ -157,7 +178,7 @@ class SearchIssuesTests(unittest.TestCase):
 
     def test_skips_graphql_repos_with_two_or_fewer_open_issues(self) -> None:
         with (
-            patch("oss_issue_scout.github_api.GITHUB_TOKEN", "token"),
+            patch("oss_issue_scout.github_api._get_token", return_value="token"),
             patch("oss_issue_scout.github_api._request_graphql", side_effect=_fake_low_open_issue_count_graphql),
         ):
             issues = search_issues(limit=5)
@@ -166,7 +187,7 @@ class SearchIssuesTests(unittest.TestCase):
 
     def test_skips_rest_repos_with_two_or_fewer_open_issues(self) -> None:
         with (
-            patch("oss_issue_scout.github_api.GITHUB_TOKEN", None),
+            patch("oss_issue_scout.github_api._get_token", return_value=None),
             patch("oss_issue_scout.github_api._request_json", side_effect=_fake_low_open_issue_count_rest),
         ):
             issues = search_issues(language="python", limit=5)
@@ -175,7 +196,7 @@ class SearchIssuesTests(unittest.TestCase):
 
     def test_fetches_more_pages_when_candidates_are_filtered(self) -> None:
         with (
-            patch("oss_issue_scout.github_api.GITHUB_TOKEN", "token"),
+            patch("oss_issue_scout.github_api._get_token", return_value="token"),
             patch("oss_issue_scout.github_api._request_graphql", side_effect=_fake_paginated_graphql),
         ):
             issues = search_issues(language="python", limit=2)
@@ -184,7 +205,7 @@ class SearchIssuesTests(unittest.TestCase):
 
     def test_fetches_next_page_when_short_page_does_not_fill_limit(self) -> None:
         with (
-            patch("oss_issue_scout.github_api.GITHUB_TOKEN", "token"),
+            patch("oss_issue_scout.github_api._get_token", return_value="token"),
             patch("oss_issue_scout.github_api._request_graphql", side_effect=_fake_short_page_graphql),
         ):
             issues = search_issues(language="python", limit=2)
@@ -193,7 +214,7 @@ class SearchIssuesTests(unittest.TestCase):
 
     def test_graphql_page_cap_does_not_mark_search_exhausted(self) -> None:
         with (
-            patch("oss_issue_scout.github_api.GITHUB_TOKEN", "token"),
+            patch("oss_issue_scout.github_api._get_token", return_value="token"),
             patch("oss_issue_scout.github_api._request_graphql", side_effect=_fake_graphql_with_more_pages),
         ):
             result = search_issue_candidates(language="python", limit=200)
@@ -203,7 +224,7 @@ class SearchIssuesTests(unittest.TestCase):
 
     def test_graphql_extends_page_cap_when_fewer_than_three_results(self) -> None:
         with (
-            patch("oss_issue_scout.github_api.GITHUB_TOKEN", "token"),
+            patch("oss_issue_scout.github_api._get_token", return_value="token"),
             patch(
                 "oss_issue_scout.github_api._request_graphql",
                 side_effect=_fake_sparse_graphql_with_more_pages,
@@ -216,7 +237,7 @@ class SearchIssuesTests(unittest.TestCase):
 
     def test_graphql_limit_mid_page_does_not_mark_search_exhausted(self) -> None:
         with (
-            patch("oss_issue_scout.github_api.GITHUB_TOKEN", "token"),
+            patch("oss_issue_scout.github_api._get_token", return_value="token"),
             patch("oss_issue_scout.github_api._request_graphql", side_effect=_fake_graphql_single_page_with_extra_nodes),
         ):
             result = search_issue_candidates(language="python", limit=2)
@@ -226,7 +247,7 @@ class SearchIssuesTests(unittest.TestCase):
 
     def test_rest_page_cap_does_not_mark_search_exhausted(self) -> None:
         with (
-            patch("oss_issue_scout.github_api.GITHUB_TOKEN", None),
+            patch("oss_issue_scout.github_api._get_token", return_value=None),
             patch("oss_issue_scout.github_api._request_json", side_effect=_fake_rest_with_more_pages),
         ):
             result = search_issue_candidates(language="python", limit=200)
@@ -236,7 +257,7 @@ class SearchIssuesTests(unittest.TestCase):
 
     def test_rest_extends_page_cap_when_fewer_than_three_results(self) -> None:
         with (
-            patch("oss_issue_scout.github_api.GITHUB_TOKEN", None),
+            patch("oss_issue_scout.github_api._get_token", return_value=None),
             patch(
                 "oss_issue_scout.github_api._request_json",
                 side_effect=_fake_sparse_rest_with_more_pages,
@@ -267,7 +288,7 @@ class SearchIssuesTests(unittest.TestCase):
         request_json.assert_not_called()
 
     def test_graphql_requires_github_token(self) -> None:
-        with patch("oss_issue_scout.github_api.GITHUB_TOKEN", None):
+        with patch("oss_issue_scout.github_api._get_token", return_value=None):
             with self.assertRaises(GitHubAPIError) as raised:
                 _request_graphql("query { viewer { login } }", {})
 
@@ -275,7 +296,7 @@ class SearchIssuesTests(unittest.TestCase):
 
     def test_graphql_timeout_raises_github_api_error(self) -> None:
         with (
-            patch("oss_issue_scout.github_api.GITHUB_TOKEN", "token"),
+            patch("oss_issue_scout.github_api._get_token", return_value="token"),
             patch("oss_issue_scout.github_api.urlopen", side_effect=TimeoutError),
         ):
             with self.assertRaises(GitHubAPIError) as raised:
@@ -285,7 +306,7 @@ class SearchIssuesTests(unittest.TestCase):
 
     def test_graphql_retries_transient_bad_gateway(self) -> None:
         with (
-            patch("oss_issue_scout.github_api.GITHUB_TOKEN", "token"),
+            patch("oss_issue_scout.github_api._get_token", return_value="token"),
             patch(
                 "oss_issue_scout.github_api.urlopen",
                 side_effect=[
@@ -302,7 +323,7 @@ class SearchIssuesTests(unittest.TestCase):
 
     def test_graphql_retries_transient_errors_up_to_attempt_limit(self) -> None:
         with (
-            patch("oss_issue_scout.github_api.GITHUB_TOKEN", "token"),
+            patch("oss_issue_scout.github_api._get_token", return_value="token"),
             patch(
                 "oss_issue_scout.github_api.urlopen",
                 side_effect=[

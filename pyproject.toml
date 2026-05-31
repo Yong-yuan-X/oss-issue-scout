@@ -14,6 +14,12 @@ authors = [
 ]
 dependencies = []
 
+[project.optional-dependencies]
+web = [
+  "flask>=3.0",
+  "flask-cors>=4.0",
+]
+
 [project.scripts]
 oss-issue-scout = "oss_issue_scout.cli:main"
 

@@ -38,6 +38,22 @@ oss-issue-scout search --language python --limit 5
 
 该示例大约 15 秒返回结果
 
+## Web 页面
+
+本地运行 Web 页面需要安装可选 Web 依赖：
+
+```powershell
+python -m pip install -e ".[web]"
+```
+
+Windows 可以一键启动前后端服务：
+
+```powershell
+.\web\start_web.bat
+```
+
+脚本会启动后端 API `http://localhost:5000`，启动前端静态服务 `http://localhost:8000`，并打开 `http://localhost:8000`。
+
 ## 参数
 
 ```text

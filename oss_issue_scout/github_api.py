@@ -22,7 +22,6 @@ from .config import (
     GITHUB_API_BASE,
     GITHUB_API_VERSION,
     GITHUB_GRAPHQL_URL,
-    GITHUB_TOKEN,
     GITHUB_TOKEN_ENV,
     MAX_GRAPHQL_PAGE_SIZE,
     MAX_GRAPHQL_SEARCH_PAGES,
@@ -444,7 +443,7 @@ def _search_issue_candidates_rest(
             data = _request_json(
                 "/search/issues",
                 {
-                    "q": query,
+                    "q": search_query,
                     "sort": "updated",
                     "order": "desc",
                     "per_page": str(per_page),
