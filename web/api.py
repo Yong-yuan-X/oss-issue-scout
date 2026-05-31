@@ -9,18 +9,24 @@ PROJECT_ROOT = os.path.dirname(WEB_DIR)
 sys.path.insert(0, PROJECT_ROOT)
 
 from oss_issue_scout.cli import _search_recommended
+from oss_issue_scout.config import MAX_USER_LIMIT
 from oss_issue_scout.github_api import GitHubAPIError
 
 app = Flask(__name__)
 CORS(app, origins=['http://localhost:8000', 'http://127.0.0.1:8000', 'http://[::]:8000'], allow_headers=['Authorization', 'Content-Type'])
 
-def validate_int(value, field_name):
+def validate_int(value, field_name, min_val=None, max_val=None):
     if value == '' or value is None:
         return None
     try:
-        return int(value)
+        parsed = int(value)
     except ValueError:
         raise ValueError(f"Invalid {field_name}: must be an integer")
+    if min_val is not None and parsed < min_val:
+        raise ValueError(f"Invalid {field_name}: must be at least {min_val}")
+    if max_val is not None and parsed > max_val:
+        raise ValueError(f"Invalid {field_name}: must be at most {max_val}")
+    return parsed
 
 @app.route('/api/search', methods=['GET'])
 def search():
@@ -40,7 +46,7 @@ def search():
         args_obj.label = label if label else None
         args_obj.updated_days = validate_int(updated_days, 'updated_days')
         args_obj.repo_updated_days = None
-        args_obj.limit = validate_int(limit, 'limit')
+        args_obj.limit = validate_int(limit, 'limit', min_val=1, max_val=MAX_USER_LIMIT)
         args_obj.preset = preset
         args_obj.format = 'json'
         args_obj.query = query if query else None
