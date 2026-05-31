@@ -27,6 +27,9 @@ class OutputTests(unittest.TestCase):
         payload = json.loads(render_json(self.results))
 
         self.assertEqual(payload[0]["repo"], "example/project")
+        self.assertEqual(payload[0]["language"], "python")
+        self.assertEqual(payload[0]["stars"], 12_000)
+        self.assertEqual(payload[0]["labels"], ["good first issue"])
         self.assertIn("reasons", payload[0])
 
     def test_renders_markdown(self) -> None:
@@ -34,12 +37,18 @@ class OutputTests(unittest.TestCase):
 
         self.assertIn("| Score | Repo | Issue | URL | Reasons | Warnings |", rendered)
         self.assertIn("example/project", rendered)
+        self.assertNotIn("Language", rendered.splitlines()[0])
+        self.assertNotIn("Stars", rendered.splitlines()[0])
+        self.assertNotIn("Labels", rendered.splitlines()[0])
 
     def test_renders_table(self) -> None:
         rendered = render_table(self.results)
 
         self.assertIn("score", rendered)
         self.assertIn("example/project", rendered)
+        self.assertNotIn("language", rendered.splitlines()[0])
+        self.assertNotIn("stars", rendered.splitlines()[0])
+        self.assertNotIn("labels", rendered.splitlines()[0])
 
 
 if __name__ == "__main__":
