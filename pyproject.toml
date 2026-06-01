@@ -4,9 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "oss-issue-scout"
-version = "0.3.0"
+version = "0.4.0"
 description = "Find worthwhile open-source issues."
-readme = "README.en.md"
+readme = "README.md"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }
 authors = [

@@ -76,6 +76,30 @@ class CliTests(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         score_issues.assert_called_once_with([issue], "intermediate")
 
+    def test_search_applies_query_to_initial_candidate_search(self) -> None:
+        issue = _issue("Relevant high score")
+
+        with (
+            patch(
+                "oss_issue_scout.cli.search_issue_candidates",
+                return_value=IssueSearchResult(issues=[issue], exhausted=False),
+            ) as search,
+            contextlib.redirect_stdout(io.StringIO()),
+        ):
+            exit_code = main(
+                [
+                    "search",
+                    "--query",
+                    "SenseVoice FunASR",
+                    "--limit",
+                    "1",
+                ]
+            )
+
+        self.assertEqual(exit_code, 0)
+        search.assert_called_once()
+        self.assertEqual(search.call_args.kwargs["query"], "SenseVoice FunASR")
+
     def test_search_uses_default_limit_of_six(self) -> None:
         with (
             patch(
