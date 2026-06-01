@@ -1,33 +1,33 @@
-﻿# oss-issue-scout
+# oss-issue-scout
 
 [![PyPI](https://img.shields.io/pypi/v/oss-issue-scout.svg)](https://pypi.org/project/oss-issue-scout/)
 [![Web App](https://img.shields.io/badge/Web%20App-Open-2ea44f)](https://yong-yuan-x.github.io/oss-issue-scout/)
 
-发现值得贡献的开源 issues
+Find worthwhile open-source issues
 
-[English README](README.en.md)
+[中文 README](README.zh-CN.md)
 
-当前版本会调用 GitHub API 搜索 open issues，并根据项目活跃度、issue 活跃度、评论数量、标签等信号做一个简单评分
-它主要面向初中级开发者，用来快速筛出更可能适合贡献的 issue
+The current version calls the GitHub API, searches open issues, and applies a simple score based on repository activity, issue activity, comments, labels, and related signals.
+It is currently aimed at junior to intermediate developers who want a faster way to find approachable issues.
 
-## 功能
+## Features
 
-- 搜索 GitHub open issues，并支持用户选择预设
-- 支持按语言、标签、stars、更新时间过滤
-- 默认跳过已有关联 PR 的 issue
-- 默认只推荐未指派的 issue
-- 默认过滤 stars 少于 100 的 repo
-- 支持 `table`、`markdown`、`json` 输出
-- 不依赖第三方包
+- Search GitHub open issues with selectable scoring presets
+- Filter by language, label, stars, and update recency
+- Skip issues that already have linked PRs
+- Recommend only unassigned issues by default
+- Skip repositories with fewer than 100 stars by default
+- Render results as `table`, `markdown`, or `json`
+- No third-party dependencies
 
-## 使用
+## Usage
 
 ```powershell
 pip install oss-issue-scout
 oss-issue-scout search --language python --label "good first issue" --limit 5
 ```
 
-建议用 GitHub token，这样比匿名搜索快3倍且不容易遇到限流，可以先设置环境变量：
+Using a GitHub token is recommended. It can be about 3x faster than anonymous search and is less likely to hit rate limits. Set it as an environment variable first:
 
 ```powershell
 $env:GITHUB_TOKEN="your_github_token"
@@ -37,47 +37,47 @@ $env:GITHUB_TOKEN="your_github_token"
 oss-issue-scout search --language python --limit 5
 ```
 
-该示例大约 15 秒返回结果
+This example usually returns results in about 15 seconds.
 
-## Web 页面
+## Web UI
 
-可以直接打开在线版：
+Open the hosted web app directly:
 
 https://yong-yuan-x.github.io/oss-issue-scout/
 
-GitHub Pages 版本是静态试用版，会在浏览器中直接请求 GitHub API，并在前端做轻量评分。
-它不运行 Python 后端，因此搜索深度和排序结果可能与 CLI / 本地 Web 后端有较大差异。
-如果想用WEB比较完善的评分，请还是在项目中去运行。这个计划后期会做PAGE同步后端的逻辑。
-可选的 GitHub Token 只会发送给 `api.github.com`，不会保存到页面里。
+The GitHub Pages version is a static trial version. It calls the GitHub API directly from your browser and applies a lightweight score in the frontend.
+It does not run the Python backend, so search depth and sorting results may differ significantly from the CLI / local web backend.
+If you want the more complete web scoring, run the project locally. A future update is planned to sync the Pages version with the backend logic.
+The optional GitHub token is only sent to `api.github.com` and is not stored by the page.
 
-本地运行 Web 页面需要安装可选 Web 依赖：
+Install the optional web dependencies before running the local web UI:
 
 ```powershell
 python -m pip install -e ".[web]"
 ```
 
-Windows 可以一键启动前后端服务：
+On Windows, start the frontend and backend together with:
 
 ```powershell
 .\web\start_web.bat
 ```
 
-脚本会启动后端 API `http://localhost:5000`，启动前端静态服务 `http://localhost:8000`，并打开 `http://localhost:8000`。
+The script starts the backend API at `http://localhost:5000`, serves the frontend at `http://localhost:8000`, and opens `http://localhost:8000`.
 
-## 参数
+## Options
 
 ```text
---language            仓库主要语言，例如 python、c++；默认不限制语言
---stars-min           仓库最低 stars；默认至少 100
---label               issue 标签，例如 "good first issue"、"bug"；默认不限制标签
---updated-days        当前 issue 最近多少天内更新过；默认不限制
---repo-updated-days   issue 所在 repo 最近多少天内有 issue 活动；默认不限制
---limit               返回数量；默认 6
---preset              使用预设搜索 issue，可选 default、junior、intermediate、senior；默认 default
---format              输出格式：table、markdown、json；默认 table
+--language            Repository primary language, such as python or c++; default: no language filter
+--stars-min           Minimum repository stars; defaults to at least 100
+--label               Issue label, such as "good first issue" or "bug"; default: no label filter
+--updated-days        Issue updated within the last N days; default: no limit
+--repo-updated-days   Repository had issue activity within the last N days; default: no limit
+--limit               Number of results, default 6
+--preset              Scoring preset: default, junior, intermediate, senior; default: default
+--format              Output format: table, markdown, json; default: table
 ```
 
-示例：
+Examples:
 
 ```powershell
 oss-issue-scout search
@@ -88,43 +88,43 @@ oss-issue-scout search --language "C++" --label "good first issue" --repo-update
 oss-issue-scout search --language c --preset intermediate --limit 10
 ```
 
-## 推荐规则
+## Scoring
 
-当前评分比较简单，主要参考：
+The current score is intentionally simple. It considers:
 
-- repo stars：中等活跃项目加分，超大型项目可能扣分
-- issue 更新时间：近期更新加分，长期未更新扣分
-- repo issue 活动：近期有 issue 活动加分
-- beginner 标签：当前 issue 有 `good first issue` / `help wanted`，且 repo 中至少有 3 个同类 open issues 时加分
-- 评论数量：评论少加分，讨论过长扣分
+- Repository stars: moderately active repos get a boost; very large repos may be penalized
+- Issue update recency: recently updated issues get a boost; stale issues are penalized
+- Repository issue activity: recent issue activity gets a boost
+- Beginner-friendly labels: `good first issue` / `help wanted` only add points when the repo has at least 3 open issues with those labels
+- Comment count: low discussion volume gets a boost; long discussions are penalized
 
-搜索阶段会直接排除：
+The search step filters out:
 
-- 关闭的 issues
-- 已归档的 repos
-- 已 linked PR 的 issues
-- 已指派的 issues
-- stars 少于 100 的 repos
+- Closed issues
+- Archived repositories
+- Issues with linked PRs
+- Assigned issues
+- Repositories with fewer than 100 stars
 
-搜索会使用用户选择的预设；如果未选择，则使用 `default` 预设。
+Search uses the selected scoring preset. If not specified, it uses the `default` preset.
 
-## 测试
+## Tests
 
 ```powershell
 python -m unittest discover
 ```
 
-测试使用 mock 数据，不会请求真实 GitHub API
+Tests use mocked GitHub responses and do not call the real GitHub API.
 
-## 后续
+## Next
 
-现在项目使用的人还比较少，如果你觉得它对你有帮助，欢迎点一个 ⭐。达到 128+ ⭐ 后会开启 Discussions
+This project is still small. If it helps you, please consider giving it a ⭐. Discussions will be opened after the project reaches 128+ ⭐.
 
-如果有改进建议或使用问题，可以在 issues 中提出
+If you have suggestions or run into problems, please open an issue.
 
-后续会逐步进行版本迭代，继续优化推荐质量和使用体验
+Future versions will continue to improve recommendation quality and usability.
 
-## 贡献者
+## Contributors
 
 <a href="https://github.com/Yong-yuan-X/oss-issue-scout/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=Yong-yuan-X/oss-issue-scout" alt="Contributors" />
