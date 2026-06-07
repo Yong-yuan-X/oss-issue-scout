@@ -62,6 +62,9 @@ def render_json(results: list[ScoredIssue]) -> str:
             "repo": result.issue.repo,
             "title": result.issue.title,
             "url": result.issue.url,
+            "language": result.issue.language,
+            "stars": result.issue.stars,
+            "labels": list(result.issue.labels),
             "reasons": list(result.reasons),
             "warnings": list(result.warnings),
         }

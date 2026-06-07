@@ -78,6 +78,7 @@ def _search_recommended(args: argparse.Namespace) -> list[ScoredIssue]:
     issues_by_url: dict[str, Issue] = {}
 
     search_result = search_issue_candidates(
+        query=args.query,
         language=args.language,
         stars_min=args.stars_min,
         label=args.label,
