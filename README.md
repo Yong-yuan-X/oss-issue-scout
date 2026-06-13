@@ -3,7 +3,7 @@
 [![PyPI](https://img.shields.io/pypi/v/oss-issue-scout.svg)](https://pypi.org/project/oss-issue-scout/)
 [![Web App](https://img.shields.io/badge/Web%20App-Open-2ea44f)](https://yong-yuan-x.github.io/oss-issue-scout/)
 
-Find worthwhile open-source issues
+Works with GitHub — oss-issue-scout uses GitHub issue and repository data to help developers find worthwhile open-source issues to contribute to.
 
 [中文 README](README.zh-CN.md)
 
