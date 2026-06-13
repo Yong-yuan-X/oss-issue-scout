@@ -84,11 +84,13 @@ query SearchIssues($query: String!, $first: Int!, $after: String) {
 
 
 class GitHubAPIError(RuntimeError):
-    pass
+    """Raised when a GitHub API request fails."""
 
 
 @dataclass(frozen=True)
 class Issue:
+    """Represents a GitHub issue with repository metadata used for scoring."""
+
     repo: str
     title: str
     url: str
@@ -105,6 +107,8 @@ class Issue:
 
 @dataclass(frozen=True)
 class IssueSearchResult:
+    """Holds the results of an issue search along with pagination status."""
+
     issues: list[Issue]
     exhausted: bool
     page_limit_reached: bool = False
@@ -117,14 +121,17 @@ def search_issues(
     label: str | None = None,
     updated_days: int | None = None,
     repo_updated_days: int | None = None,
+    exclude_repos: tuple[str, ...] = (),
     limit: int = 10,
 ) -> list[Issue]:
+    """Search GitHub issues and return a flat list, delegating to search_issue_candidates."""
     return search_issue_candidates(
         language=language,
         stars_min=stars_min,
         label=label,
         updated_days=updated_days,
         repo_updated_days=repo_updated_days,
+        exclude_repos=exclude_repos,
         limit=limit,
     ).issues
 
@@ -137,10 +144,13 @@ def search_issue_candidates(
     label: str | None = None,
     updated_days: int | None = None,
     repo_updated_days: int | None = None,
+    exclude_repos: tuple[str, ...] = (),
     limit: int = 10,
     max_pages: int | None = None,
     page_size: int | None = None,
 ) -> IssueSearchResult:
+    """Search GitHub issues using GraphQL (preferred) or REST, excluding specified repos."""
+    exclude_repos_lower = {repo.strip().casefold() for repo in exclude_repos if repo.strip()}
     if _get_token():
         try:
             return _search_issue_candidates_graphql(
@@ -150,6 +160,7 @@ def search_issue_candidates(
                 label=label,
                 updated_days=updated_days,
                 repo_updated_days=repo_updated_days,
+                exclude_repos=exclude_repos_lower,
                 limit=limit,
                 max_pages=max_pages,
                 page_size=page_size,
@@ -166,6 +177,7 @@ def search_issue_candidates(
         label=label,
         updated_days=updated_days,
         repo_updated_days=repo_updated_days,
+        exclude_repos=exclude_repos_lower,
         limit=limit,
         max_pages=max_pages,
         page_size=page_size,
@@ -181,10 +193,16 @@ def backfill_issue_candidates(
     label: str | None = None,
     updated_days: int | None = None,
     repo_updated_days: int | None = None,
+    exclude_repos: tuple[str, ...] = (),
     per_page: int = BACKFILL_PER_PAGE,
     page: int = 1,
 ) -> list[Issue]:
+    """Fetch additional issue candidates for a single repository via the REST search API."""
     if not repo or per_page <= 0 or page <= 0:
+        return []
+    exclude_lower = {r.strip().casefold() for r in exclude_repos if r.strip()}
+    if repo.strip().casefold() in exclude_lower:
+        _debug(f"repo backfill skipped excluded repo={repo}")
         return []
 
     effective_stars_min = max(stars_min or DEFAULT_STARS_MIN, DEFAULT_STARS_MIN)
@@ -231,6 +249,7 @@ def backfill_issue_candidates(
             repo_activity_cache=repo_activity_cache,
             repo_open_issue_count_cache=repo_open_issue_count_cache,
             repo_beginner_issue_count_cache=repo_beginner_issue_count_cache,
+            exclude_repos=frozenset(),
             language=language,
             stars_min=effective_stars_min,
             repo_updated_days=repo_updated_days,
@@ -255,10 +274,12 @@ def _search_issue_candidates_graphql(
     label: str | None = None,
     updated_days: int | None = None,
     repo_updated_days: int | None = None,
+    exclude_repos: set[str] = frozenset(),
     limit: int = 10,
     max_pages: int | None = None,
     page_size: int | None = None,
 ) -> IssueSearchResult:
+    """Search GitHub issues via the GraphQL API, filtering out excluded repos."""
     if limit <= 0 or (max_pages is not None and max_pages <= 0):
         return IssueSearchResult(issues=[], exhausted=True)
 
@@ -269,6 +290,7 @@ def _search_issue_candidates_graphql(
         stars_min=effective_stars_min,
         label=label,
         updated_days=updated_days,
+        exclude_repos=exclude_repos,
         sort_updated_desc=True,
     )
     issues: list[Issue] = []
@@ -324,6 +346,9 @@ def _search_issue_candidates_graphql(
             ):
                 skipped["repo_activity"] += 1
                 continue
+            if issue.repo.casefold() in exclude_repos:
+                skipped["excluded_repo"] += 1
+                continue
             if issue.repo_open_issue_count < MIN_REPO_OPEN_ISSUES:
                 skipped["repo_open_issues"] += 1
                 continue
@@ -370,6 +395,7 @@ def _search_issue_candidates_graphql(
 
 
 def _issue_from_graphql_node(node: Any) -> Issue | None:
+    """Convert a GraphQL search result node into an Issue, or None if the node is invalid."""
     if not isinstance(node, dict):
         return None
     repository = node.get("repository")
@@ -405,10 +431,12 @@ def _search_issue_candidates_rest(
     label: str | None = None,
     updated_days: int | None = None,
     repo_updated_days: int | None = None,
+    exclude_repos: set[str] = frozenset(),
     limit: int = 10,
     max_pages: int | None = None,
     page_size: int | None = None,
 ) -> IssueSearchResult:
+    """Search GitHub issues via the REST API, filtering out excluded repos."""
     if limit <= 0 or (max_pages is not None and max_pages <= 0):
         return IssueSearchResult(issues=[], exhausted=True)
 
@@ -419,6 +447,7 @@ def _search_issue_candidates_rest(
         stars_min=effective_stars_min,
         label=label,
         updated_days=updated_days,
+        exclude_repos=exclude_repos,
     )
     repo_cache: dict[str, dict[str, Any]] = {}
     repo_activity_cache: dict[str, int] = {}
@@ -470,6 +499,7 @@ def _search_issue_candidates_rest(
                     repo_activity_cache=repo_activity_cache,
                     repo_open_issue_count_cache=repo_open_issue_count_cache,
                     repo_beginner_issue_count_cache=repo_beginner_issue_count_cache,
+                    exclude_repos=exclude_repos,
                     language=language,
                     stars_min=effective_stars_min,
                     repo_updated_days=repo_updated_days,
@@ -602,6 +632,7 @@ def _append_rest_candidates(
     repo_activity_cache: dict[str, int],
     repo_open_issue_count_cache: dict[str, int],
     repo_beginner_issue_count_cache: dict[str, int],
+    exclude_repos: set[str] = frozenset(),
     language: str | None,
     stars_min: int,
     repo_updated_days: int | None,
@@ -632,6 +663,9 @@ def _append_rest_candidates(
 
     for candidate in qualified:
         repo = candidate["repo"]
+        if repo.casefold() in exclude_repos:
+            skipped["excluded_repo"] += 1
+            continue
         item = candidate["item"]
         if (
             repo_updated_days is not None
@@ -762,8 +796,10 @@ def _build_issue_query(
     stars_min: int | None,
     label: str | None,
     updated_days: int | None,
+    exclude_repos: set[str] = frozenset(),
     sort_updated_desc: bool = False,
 ) -> str:
+    """Build a GitHub search query string with optional filters and repo exclusions."""
     parts = ["is:issue", "is:open", "archived:false", "-linked:pr", "no:assignee"]
     if query:
         parts.append(_quote_query_value(query))
@@ -776,6 +812,8 @@ def _build_issue_query(
     if updated_days is not None:
         cutoff = datetime.now(timezone.utc).date() - timedelta(days=updated_days)
         parts.append(f"updated:>={cutoff.isoformat()}")
+    for excluded in exclude_repos:
+        parts.append(f"-repo:{excluded}")
     if sort_updated_desc:
         parts.append("sort:updated-desc")
     return " ".join(parts)
@@ -788,6 +826,7 @@ def _build_repo_issue_query(
     label: str | None,
     updated_days: int | None,
 ) -> str:
+    """Build a GitHub search query string scoped to a single repository."""
     parts = [
         f"repo:{repo}",
         "is:issue",

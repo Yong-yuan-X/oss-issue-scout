@@ -152,6 +152,10 @@
             <label class="setting-label" data-i18n="search-repo-days">仓库活动天数（本地 API）</label>
             <input type="number" id="search-repo-updated-days" class="setting-input" placeholder="不限制">
           </div>
+          <div class="setting-group">
+            <label class="setting-label" data-i18n="search-exclude-repo">排除仓库 (可选)</label>
+            <input type="text" id="search-exclude-repo" class="setting-input" placeholder="django/django, pandas-dev/pandas..." data-i18n-placeholder="search-exclude-repo-placeholder">
+          </div>
           <div class="setting-group token-input-wrapper">
             <label class="setting-label" data-i18n="search-token">GitHub Token (可选)</label>
             <div style="position: relative;">
@@ -487,6 +491,8 @@ const translations = {
     'search-days': '更新天数',
     'search-repo-days': '仓库活动天数（本地 API）',
     'search-token': 'GitHub Token（可选）',
+    'search-exclude-repo': '排除仓库（可选）',
+    'search-exclude-repo-placeholder': 'django/django, pandas-dev/pandas...',
     'search-button': '搜索',
     'results-count': '找到 {count} 个结果',
     'results-empty': '没有找到匹配的 Issue，可以放宽标签、Stars 或更新时间筛选。',
@@ -554,6 +560,8 @@ const translations = {
     'search-days': 'Updated Days',
     'search-repo-days': 'Repo Activity Days (Local API)',
     'search-token': 'GitHub Token (Optional)',
+    'search-exclude-repo': 'Exclude Repos (Optional)',
+    'search-exclude-repo-placeholder': 'django/django, pandas-dev/pandas...',
     'search-button': 'Search',
     'results-count': '{count} results found',
     'results-empty': 'No matching issues found. Try relaxing the label, stars, or recency filters.',
@@ -908,6 +916,11 @@ document.addEventListener('DOMContentLoaded', function() {
     if (updatedDays !== null) {
       parts.push(`updated:>=${dateDaysAgo(updatedDays)}`);
     }
+    if (options.excludeRepos && options.excludeRepos.length > 0) {
+      options.excludeRepos.forEach(repo => {
+        parts.push(`-repo:${quoteQueryValue(repo)}`);
+      });
+    }
     return parts.join(' ');
   }
   async function githubRequest(url, token) {
@@ -1022,6 +1035,9 @@ document.addEventListener('DOMContentLoaded', function() {
       searchedPages = page;
       const pageIssues = await issuesFromStaticSearchData(searchData, options, effectiveStarsMin);
       pageIssues.forEach(issue => {
+        if (options.excludeRepos && options.excludeRepos.some(er => er.toLowerCase() === issue.repo.toLowerCase())) {
+          return;
+        }
         issuesByUrl.set(issue.url || `${issue.repo}/${issue.title}`, issue);
       });
       const scoredIssues = [...issuesByUrl.values()]
@@ -1053,6 +1069,11 @@ document.addEventListener('DOMContentLoaded', function() {
     url.searchParams.set('preset', options.preset || 'default');
     url.searchParams.set('updated_days', options.updatedDays || '');
     url.searchParams.set('repo_updated_days', options.repoUpdatedDays || '');
+    if (options.excludeRepos && options.excludeRepos.length > 0) {
+      options.excludeRepos.forEach(repo => {
+        url.searchParams.append('exclude_repo', repo);
+      });
+    }
     const headers = {};
     if (options.token) {
       headers.Authorization = `Bearer ${options.token}`;
@@ -1075,6 +1096,10 @@ document.addEventListener('DOMContentLoaded', function() {
     const updatedDays = document.getElementById('search-updated-days').value;
     const repoUpdatedDays = document.getElementById('search-repo-updated-days').value;
     const token = document.getElementById('search-token').value;
+    const excludeRepoRaw = document.getElementById('search-exclude-repo').value;
+    const excludeRepos = excludeRepoRaw
+      ? excludeRepoRaw.split(',').map(s => s.trim()).filter(Boolean)
+      : [];
     const lowerQuery = query.toLowerCase().trim();
     for (const lang of languagesList) {
         if (lowerQuery === lang) {
@@ -1123,7 +1148,8 @@ document.addEventListener('DOMContentLoaded', function() {
         preset,
         updatedDays,
         repoUpdatedDays,
-        token
+        token,
+        excludeRepos
       };
       let issues;
       if (shouldUseLocalApi()) {

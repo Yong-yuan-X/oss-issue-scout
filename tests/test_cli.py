@@ -510,6 +510,136 @@ class CliTests(unittest.TestCase):
         self.assertEqual(raised.exception.code, 2)
         self.assertIn("must be at most 250", stderr.getvalue())
 
+    def test_search_excludes_specified_repos_from_results(self) -> None:
+        stdout = io.StringIO()
+        included_issue = _issue("Included", repo="example/included")
+        excluded_issue = _issue("Excluded", repo="example/excluded")
+
+        with (
+            patch(
+                "oss_issue_scout.cli.search_issue_candidates",
+                return_value=IssueSearchResult(
+                    issues=[excluded_issue, included_issue],
+                    exhausted=True,
+                ),
+            ),
+            patch("oss_issue_scout.cli.backfill_issue_candidates", return_value=[]),
+            patch("oss_issue_scout.cli.sleep"),
+            contextlib.redirect_stdout(stdout),
+        ):
+            exit_code = main(
+                [
+                    "search",
+                    "--exclude-repo",
+                    "example/excluded",
+                    "--limit",
+                    "2",
+                ],
+            )
+
+        self.assertEqual(exit_code, 0)
+        output = stdout.getvalue()
+        self.assertIn("Included", output)
+        self.assertNotIn("Excluded", output)
+
+    def test_search_excludes_multiple_repos(self) -> None:
+        stdout = io.StringIO()
+        included_issue = _issue("Included", repo="example/kept")
+        excluded_a = _issue("Excluded A", repo="example/excluded-a")
+        excluded_b = _issue("Excluded B", repo="example/excluded-b")
+
+        with (
+            patch(
+                "oss_issue_scout.cli.search_issue_candidates",
+                return_value=IssueSearchResult(
+                    issues=[excluded_a, excluded_b, included_issue],
+                    exhausted=True,
+                ),
+            ),
+            patch("oss_issue_scout.cli.backfill_issue_candidates", return_value=[]),
+            patch("oss_issue_scout.cli.sleep"),
+            contextlib.redirect_stdout(stdout),
+        ):
+            exit_code = main(
+                [
+                    "search",
+                    "--exclude-repo",
+                    "example/excluded-a",
+                    "--exclude-repo",
+                    "example/excluded-b",
+                    "--limit",
+                    "2",
+                ],
+            )
+
+        self.assertEqual(exit_code, 0)
+        output = stdout.getvalue()
+        self.assertIn("Included", output)
+        self.assertNotIn("Excluded A", output)
+        self.assertNotIn("Excluded B", output)
+
+    def test_search_exclude_repo_is_case_insensitive(self) -> None:
+        stdout = io.StringIO()
+        included_issue = _issue("Included", repo="Example/Kept")
+        excluded_issue = _issue("Excluded", repo="Example/Excluded")
+
+        with (
+            patch(
+                "oss_issue_scout.cli.search_issue_candidates",
+                return_value=IssueSearchResult(
+                    issues=[excluded_issue, included_issue],
+                    exhausted=True,
+                ),
+            ),
+            patch("oss_issue_scout.cli.backfill_issue_candidates", return_value=[]),
+            patch("oss_issue_scout.cli.sleep"),
+            contextlib.redirect_stdout(stdout),
+        ):
+            exit_code = main(
+                [
+                    "search",
+                    "--exclude-repo",
+                    "example/excluded",
+                    "--limit",
+                    "2",
+                ],
+            )
+
+        self.assertEqual(exit_code, 0)
+        output = stdout.getvalue()
+        self.assertIn("Included", output)
+        self.assertNotIn("Excluded", output)
+
+    def test_search_excludes_repos_from_backfill(self) -> None:
+        stdout = io.StringIO()
+
+        with (
+            patch(
+                "oss_issue_scout.cli.search_issue_candidates",
+                return_value=IssueSearchResult(
+                    issues=[_issue("High score", repo="example/one")],
+                    exhausted=True,
+                ),
+            ),
+            patch(
+                "oss_issue_scout.cli.backfill_issue_candidates",
+                return_value=[_issue("Backfilled", repo="example/two")],
+            ) as backfill,
+            contextlib.redirect_stdout(stdout),
+        ):
+            exit_code = main(
+                [
+                    "search",
+                    "--exclude-repo",
+                    "example/one",
+                    "--limit",
+                    "2",
+                ],
+            )
+
+        self.assertEqual(exit_code, 0)
+        backfill.assert_not_called()
+
 
 def _issue(
     title: str,

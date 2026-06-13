@@ -17,6 +17,8 @@ from oss_issue_scout.github_api import (
     backfill_issue_candidates,
     search_issue_candidates,
     search_issues,
+    _search_issue_candidates_graphql,
+    _search_issue_candidates_rest,
 )
 
 
@@ -364,6 +366,97 @@ class SearchIssuesTests(unittest.TestCase):
         self.assertEqual(data, {"items": []})
         self.assertEqual(urlopen.call_count, 2)
 
+    def test_build_issue_query_excludes_repos(self) -> None:
+        query = _build_issue_query(
+            language=None,
+            stars_min=None,
+            label=None,
+            updated_days=None,
+            exclude_repos={"django/django", "pandas-dev/pandas"},
+        )
+
+        self.assertIn("-repo:django/django", query)
+        self.assertIn("-repo:pandas-dev/pandas", query)
+
+    def test_graphql_search_excludes_repos_from_query(self) -> None:
+        with (
+            patch("oss_issue_scout.github_api._get_token", return_value="token"),
+            patch("oss_issue_scout.github_api._request_graphql", side_effect=_fake_graphql) as request_graphql,
+        ):
+            search_issue_candidates(
+                language="python",
+                exclude_repos=("django/django",),
+                limit=5,
+            )
+
+        search_query = request_graphql.call_args.args[1]["query"]
+        self.assertIn("-repo:django/django", search_query)
+
+    def test_graphql_search_excludes_repos_from_results(self) -> None:
+        with (
+            patch("oss_issue_scout.github_api._get_token", return_value="token"),
+            patch("oss_issue_scout.github_api._request_graphql", side_effect=_fake_graphql_with_excluded_repo),
+        ):
+            issues = search_issues(
+                language="python",
+                exclude_repos=("example/excluded",),
+                limit=5,
+            )
+
+        self.assertEqual([issue.repo for issue in issues], ["example/project"])
+
+    def test_rest_search_excludes_repos_from_query(self) -> None:
+        with (
+            patch("oss_issue_scout.github_api._get_token", return_value=None),
+            patch("oss_issue_scout.github_api._request_json", side_effect=_fake_rest) as request_json,
+        ):
+            search_issue_candidates(
+                language="python",
+                exclude_repos=("django/django",),
+                limit=5,
+            )
+
+        params = request_json.call_args_list[0].args[1]
+        self.assertIn("-repo:django/django", params["q"])
+
+    def test_rest_search_excludes_repos_from_results(self) -> None:
+        with (
+            patch("oss_issue_scout.github_api._get_token", return_value=None),
+            patch("oss_issue_scout.github_api._request_json", side_effect=_fake_rest_with_excluded_repo),
+        ):
+            issues = search_issues(
+                language="python",
+                exclude_repos=("example/excluded",),
+                limit=5,
+            )
+
+        self.assertEqual([issue.repo for issue in issues], ["example/project"])
+
+    def test_exclude_repo_is_case_insensitive(self) -> None:
+        with (
+            patch("oss_issue_scout.github_api._get_token", return_value="token"),
+            patch("oss_issue_scout.github_api._request_graphql", side_effect=_fake_graphql_with_excluded_repo),
+        ):
+            issues = search_issues(
+                language="python",
+                exclude_repos=("Example/Excluded",),
+                limit=5,
+            )
+
+        self.assertEqual([issue.repo for issue in issues], ["example/project"])
+
+    def test_backfill_skips_excluded_repo(self) -> None:
+        with patch("oss_issue_scout.github_api._request_json") as request_json:
+            issues = backfill_issue_candidates(
+                repo="django/django",
+                exclude_repos=("django/django",),
+                per_page=25,
+                page=1,
+            )
+
+        self.assertEqual(issues, [])
+        request_json.assert_not_called()
+
     def test_rest_logs_rate_limit_headers_in_debug_mode(self) -> None:
         stderr = io.StringIO()
 
@@ -393,6 +486,46 @@ class SearchIssuesTests(unittest.TestCase):
         self.assertIn("resource=search", output)
         self.assertIn("remaining=0", output)
         self.assertIn("retry-after=60", output)
+
+
+def _fake_graphql_with_excluded_repo(query: str, variables: dict) -> dict:
+    return _graphql_response(
+        nodes=[
+            _graphql_issue_node(
+                repo="example/excluded",
+                stars=12_000,
+                title="Excluded issue",
+            ),
+            _graphql_issue_node(
+                repo="example/project",
+                stars=12_000,
+                title="Included issue",
+            ),
+        ],
+        has_next_page=False,
+    )
+
+
+def _fake_rest_with_excluded_repo(path: str, params: dict[str, str] | None = None) -> dict:
+    if path == "/search/issues" and params and params.get("per_page") == "1":
+        if " is:open" in params.get("q", ""):
+            return {"total_count": MIN_REPO_OPEN_ISSUES, "items": []}
+        if "label:" in params.get("q", ""):
+            return {"total_count": 3, "items": []}
+        return {"items": [{"updated_at": "2026-05-20T00:00:00Z"}]}
+
+    if path == "/search/issues" and params and params.get("page") not in (None, "1"):
+        return {"items": []}
+
+    if path == "/search/issues":
+        return {
+            "items": [
+                _rest_issue_item(repo="example/excluded", page=1),
+                _rest_issue_item(repo="example/project", page=1),
+            ]
+        }
+
+    raise AssertionError(f"Unexpected API request: {path} {params}")
 
 
 def _fake_graphql(query: str, variables: dict) -> dict:

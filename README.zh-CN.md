@@ -65,6 +65,7 @@ Windows 可以一键启动前后端服务：
 --label               issue 标签，例如 "good first issue"、"bug"；默认不限制标签
 --updated-days        当前 issue 最近多少天内更新过；默认不限制
 --repo-updated-days   issue 所在 repo 最近多少天内有 issue 活动；默认不限制
+--exclude-repo        排除指定仓库 (owner/name)；可多次使用；默认不排除
 --limit               返回数量；默认 6
 --preset              使用预设搜索 issue，可选 default、junior、intermediate、senior；默认 default
 --format              输出格式：table、markdown、json；默认 table
@@ -79,6 +80,7 @@ oss-issue-scout search --language python --label "help wanted" --stars-min 500 -
 oss-issue-scout search --language rust --format json
 oss-issue-scout search --language "C++" --label "good first issue" --repo-updated-days 7
 oss-issue-scout search --language c --preset intermediate --limit 10
+oss-issue-scout search --language python --exclude-repo django/django --exclude-repo pandas-dev/pandas
 ```
 
 ## 推荐规则

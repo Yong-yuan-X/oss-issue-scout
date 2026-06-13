@@ -1,6 +1,9 @@
+import sys
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from web.api import app
 
@@ -18,6 +21,13 @@ class WebApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(search.call_args.args[0].updated_days, 3)
         self.assertEqual(search.call_args.args[0].repo_updated_days, 7)
+
+    @patch("web.api._search_recommended", return_value=[])
+    def test_search_passes_exclude_repo_to_search(self, search) -> None:
+        response = self.client.get("/api/search?exclude_repo=django/django&exclude_repo=pandas-dev/pandas")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(search.call_args.args[0].exclude_repo, ["django/django", "pandas-dev/pandas"])
 
     @patch("web.api._search_recommended", return_value=[])
     def test_search_rejects_non_integer_repo_updated_days(self, search) -> None:

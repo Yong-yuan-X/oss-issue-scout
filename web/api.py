@@ -39,6 +39,7 @@ def search():
         updated_days = request.args.get('updated_days', '')
         repo_updated_days = request.args.get('repo_updated_days', '')
         query = request.args.get('query', '')
+        exclude_repo = request.args.getlist('exclude_repo')
         token = request.headers.get('Authorization', '').replace('Bearer ', '')
         
         args_obj = argparse.Namespace()
@@ -51,6 +52,7 @@ def search():
         args_obj.preset = preset
         args_obj.format = 'json'
         args_obj.query = query if query else None
+        args_obj.exclude_repo = exclude_repo
         
         if token:
             original_token = os.environ.get('GITHUB_TOKEN')

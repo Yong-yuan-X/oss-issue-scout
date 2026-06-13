@@ -68,6 +68,7 @@ The script starts the backend API at `http://localhost:5000`, serves the fronten
 --label               Issue label, such as "good first issue" or "bug"; default: no label filter
 --updated-days        Issue updated within the last N days; default: no limit
 --repo-updated-days   Repository had issue activity within the last N days; default: no limit
+--exclude-repo        Exclude a repository (owner/name) from results; can be repeated; default: none
 --limit               Number of results, default 6
 --preset              Scoring preset: default, junior, intermediate, senior; default: default
 --format              Output format: table, markdown, json; default: table
@@ -82,6 +83,7 @@ oss-issue-scout search --language python --label "help wanted" --stars-min 500 -
 oss-issue-scout search --language rust --format json
 oss-issue-scout search --language "C++" --label "good first issue" --repo-updated-days 7
 oss-issue-scout search --language c --preset intermediate --limit 10
+oss-issue-scout search --language python --exclude-repo django/django --exclude-repo pandas-dev/pandas
 ```
 
 ## Scoring

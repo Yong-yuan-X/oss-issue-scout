@@ -28,7 +28,23 @@ from .output import render_results
 from .scoring import ScoredIssue, score_issues
 
 
+def _clean_exclude_repos(raw: list[str]) -> list[str]:
+    """Strip whitespace, discard empty values, and deduplicate exclude-repo entries."""
+    seen: set[str] = set()
+    cleaned: list[str] = []
+    for repo in raw:
+        repo = repo.strip()
+        if not repo:
+            continue
+        key = repo.casefold()
+        if key not in seen:
+            seen.add(key)
+            cleaned.append(repo)
+    return cleaned
+
+
 def build_parser() -> argparse.ArgumentParser:
+    """Build and return the CLI argument parser for oss-issue-scout."""
     parser = argparse.ArgumentParser(prog="oss-issue-scout")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -45,6 +61,8 @@ def build_parser() -> argparse.ArgumentParser:
         choices=("default", "junior", "intermediate", "senior"),
         default="default",
     )
+    search_parser.add_argument("--exclude-repo", action="append", default=[],
+        help="exclude a repository (owner/name) from results; can be repeated")
     search_parser.add_argument(
         "--format",
         choices=("table", "markdown", "json"),
@@ -55,6 +73,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _positive_int(value: str) -> int:
+    """Validate that a string argument is a positive integer within the allowed range."""
     parsed = int(value)
     if parsed <= 0:
         raise argparse.ArgumentTypeError("must be greater than 0")
@@ -64,6 +83,8 @@ def _positive_int(value: str) -> int:
 
 
 def _run_search(args: argparse.Namespace) -> int:
+    """Execute the search sub-command and return an exit code."""
+    args.exclude_repo = _clean_exclude_repos(args.exclude_repo)
     try:
         results = _search_recommended(args)
     except GitHubAPIError as error:
@@ -74,6 +95,7 @@ def _run_search(args: argparse.Namespace) -> int:
 
 
 def _search_recommended(args: argparse.Namespace) -> list[ScoredIssue]:
+    """Search for issues and return a list of scored, recommended results."""
     candidate_limit = min(args.limit * CANDIDATE_MULTIPLIER, MAX_CANDIDATE_LIMIT)
     issues_by_url: dict[str, Issue] = {}
 
@@ -84,6 +106,7 @@ def _search_recommended(args: argparse.Namespace) -> list[ScoredIssue]:
         label=args.label,
         updated_days=args.updated_days,
         repo_updated_days=args.repo_updated_days,
+        exclude_repos=tuple(args.exclude_repo),
         limit=candidate_limit,
     )
     selected_results = _select_search_results(
@@ -106,6 +129,7 @@ def _search_recommended(args: argparse.Namespace) -> list[ScoredIssue]:
             label=args.label,
             updated_days=args.updated_days,
             repo_updated_days=args.repo_updated_days,
+            exclude_repos=tuple(args.exclude_repo),
             limit=MAX_CANDIDATE_LIMIT,
             max_pages=max_pages,
             page_size=RECOMMENDATION_SEARCH_PAGE_SIZE,
@@ -130,8 +154,11 @@ def _select_search_results(
     issues_by_url: dict[str, Issue],
     allow_low_scores: bool,
 ) -> list[ScoredIssue] | None:
+    """Filter, score, and select issues from search results; return None to request more pages."""
+    exclude_lower = {repo.casefold() for repo in args.exclude_repo}
     for issue in search_result.issues:
-        issues_by_url.setdefault(issue.url, issue)
+        if issue.repo.casefold() not in exclude_lower:
+            issues_by_url.setdefault(issue.url, issue)
 
     scored_results = score_issues(list(issues_by_url.values()), args.preset)
     recommended_results = _select_results(
@@ -171,7 +198,9 @@ def _backfill_recommendations(
     args: argparse.Namespace,
     issues_by_url: dict[str, Issue],
 ) -> list[ScoredIssue]:
-    repos = _backfill_repos(issues_by_url.values())
+    """Backfill additional issues from top repos when initial results are insufficient."""
+    exclude_lower = {repo.casefold() for repo in args.exclude_repo}
+    repos = _backfill_repos(issues_by_url.values(), exclude_repos=tuple(args.exclude_repo))
     if not repos:
         return []
 
@@ -181,10 +210,12 @@ def _backfill_recommendations(
                 args=args,
                 repo=repo,
                 known_issues=list(issues_by_url.values()),
+                issues_by_url=issues_by_url,
                 page=page,
             )
             for issue in issues:
-                issues_by_url.setdefault(issue.url, issue)
+                if issue.repo.casefold() not in exclude_lower:
+                    issues_by_url.setdefault(issue.url, issue)
 
             scored_results = score_issues(list(issues_by_url.values()), args.preset)
             recommended_results = _select_results(
@@ -204,12 +235,14 @@ def _backfill_recommendations(
     )
 
 
-def _backfill_repos(issues: Iterable[Issue]) -> list[str]:
+def _backfill_repos(issues: Iterable[Issue], *, exclude_repos: tuple[str, ...] = ()) -> list[str]:
+    """Collect unique repo names from issues, excluding any in exclude_repos, up to the backfill limit."""
+    exclude_lower = {repo.casefold() for repo in exclude_repos}
     repos: list[str] = []
     seen = set()
     for issue in issues:
         repo = issue.repo
-        if repo in seen:
+        if repo in seen or repo.casefold() in exclude_lower:
             continue
         seen.add(repo)
         repos.append(repo)
@@ -223,17 +256,20 @@ def _backfill_repo(
     args: argparse.Namespace,
     repo: str,
     known_issues: list[Issue],
+    issues_by_url: dict[str, Issue],
     page: int,
 ) -> list[Issue]:
+    """Fetch additional issue candidates for a single repo via the backfill API."""
     try:
         return backfill_issue_candidates(
             repo=repo,
-            known_issues=known_issues,
+            known_issues=list(issues_by_url.values()),
             language=args.language,
             stars_min=args.stars_min,
             label=args.label,
             updated_days=args.updated_days,
             repo_updated_days=args.repo_updated_days,
+            exclude_repos=tuple(args.exclude_repo),
             per_page=BACKFILL_PER_PAGE,
             page=page,
         )
@@ -249,6 +285,7 @@ def _select_results(
     limit: int,
     allow_low_scores: bool,
 ) -> list[ScoredIssue]:
+    """Select up to *limit* scored issues, enforcing a per-repo cap and optional minimum score."""
     selected: list[ScoredIssue] = []
     repo_counts: dict[str, int] = {}
     per_repo_limit = _per_repo_result_limit(limit)
@@ -269,20 +306,24 @@ def _select_results(
 
 
 def _per_repo_result_limit(limit: int) -> int:
+    """Return the maximum number of results allowed from a single repository."""
     if limit <= 5:
         return 1
     return limit // 5 + 1
 
 
 def _is_rate_limit_error(error: GitHubAPIError) -> bool:
+    """Return True if the API error was caused by rate limiting."""
     return "rate limit" in str(error).casefold()
 
 
 def _should_delay_backfill(repo_index: int, repos: list[str]) -> bool:
+    """Return True if a delay should be inserted before processing the next repo."""
     return BACKFILL_DELAY_SECONDS > 0 and repo_index < len(repos) - 1
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Entry point for the oss-issue-scout CLI; parse arguments and dispatch the sub-command."""
     parser = build_parser()
     args = parser.parse_args(argv)
     return args.func(args)
