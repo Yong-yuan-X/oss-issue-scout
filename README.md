@@ -41,6 +41,10 @@ This example usually returns results in about 15 seconds.
 
 ## Web UI
 
+<img width="890" height="472" alt="img_v3_02128_586c19e0-cbff-4406-8292-242be04e6d1g" src="https://github.com/user-attachments/assets/0a0b4dc3-c4ac-4fab-a54a-efa9f076cf04" />
+
+<img width="983" height="742" alt="img_v3_02128_2059a064-c803-435f-a41e-beb05102d7bg" src="https://github.com/user-attachments/assets/c7d38192-bc2b-4c79-8bc5-837f174262a0" />
+
 The GitHub Pages version is a static trial version. It calls the GitHub API directly from your browser and applies a lightweight score in the frontend.
 It does not run the Python backend, so search depth and sorting results may differ significantly from the CLI / local web backend.
 If you want the more complete web scoring, run the project locally. A future update is planned to sync the Pages version with the backend logic.
