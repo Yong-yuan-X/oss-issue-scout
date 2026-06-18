@@ -148,6 +148,42 @@ class ScoringTests(unittest.TestCase):
 
         self.assertIn("unknown preset", str(raised.exception))
 
+    def test_dict_preset_is_accepted_by_score_issues(self) -> None:
+        # Passing a dict preset directly should work the same as the matching
+        # preset name. score_issue() already accepts a dict; score_issues()
+        # should too, and previously raised NameError because the closure
+        # variable was only set for the str / None branches.
+        from oss_issue_scout import scoring_presets
+        issue = _issue(repo="example/direct")
+        default_results = score_issues([issue], preset="default")
+        direct = score_issues([issue], preset=scoring_presets.default)
+        self.assertEqual(
+            [s.score for s in default_results],
+            [s.score for s in direct],
+        )
+
+    def test_dict_preset_junior_differs_from_default(self) -> None:
+        from oss_issue_scout import scoring_presets
+        issue = _issue(repo="example/jr")
+        default_results = score_issues([issue], preset="default")
+        junior_direct = score_issues([issue], preset=scoring_presets.junior)
+        # The dict and the name should produce identical results.
+        junior_named = score_issues([issue], preset="junior")
+        self.assertEqual(
+            [s.score for s in junior_direct],
+            [s.score for s in junior_named],
+        )
+        # And the two presets should normally produce different scores.
+        self.assertNotEqual(
+            [s.score for s in default_results],
+            [s.score for s in junior_direct],
+        )
+
+    def test_invalid_preset_type_raises_type_error(self) -> None:
+        issue = _issue(repo="example/typed")
+        with self.assertRaises(TypeError):
+            score_issues([issue], preset=42)  # type: ignore[arg-type]
+
 
 def _issue(
     *,

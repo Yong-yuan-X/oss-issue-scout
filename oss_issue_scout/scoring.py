@@ -60,7 +60,9 @@ def score_issue(issue: Issue, preset: dict | None = None) -> ScoredIssue:
         warnings=tuple(warnings),
     )
 
-def score_issues(issues: list[Issue], preset: str | None = None) -> list[ScoredIssue]:
+def score_issues(
+    issues: list[Issue], preset: str | dict | None = None
+) -> list[ScoredIssue]:
     if preset is None:
         preset_obj = scoring_presets.default
     elif isinstance(preset, str):
@@ -75,6 +77,12 @@ def score_issues(issues: list[Issue], preset: str | None = None) -> list[ScoredI
             preset_obj = preset_map[preset]
         except KeyError as exc:
             raise ValueError(f"unknown preset: {preset}") from exc
+    elif isinstance(preset, dict):
+        preset_obj = preset
+    else:
+        raise TypeError(
+            f"preset must be a preset name, dict, or None; got {type(preset).__name__}"
+        )
 
     return sorted(
         (score_issue(issue, preset=preset_obj) for issue in issues),
