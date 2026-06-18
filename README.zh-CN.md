@@ -25,7 +25,7 @@ pip install oss-issue-scout
 oss-issue-scout search --language python --label "good first issue" --limit 5
 ```
 
-建议用 GitHub token，这样比匿名搜索快得多且不容易遇到限流，可以先设置环境变量：
+推荐配置GitHub token, 比匿名搜索快约 3 倍且不容易触发限流。请设置环境变量：
 
 ```powershell
 $env:GITHUB_TOKEN="your_github_token"
@@ -44,7 +44,7 @@ oss-issue-scout search --language python --limit 5
 
 GitHub Pages 版本是静态试用版，会在浏览器中直接请求 GitHub API，并在前端做轻量评分。
 它不运行 Python 后端，因此搜索深度和排序结果可能与 CLI / 本地 Web 后端有较大差异。
-如果想用WEB比较完善的评分，请还是在项目中去运行。这个计划后期会做PAGE同步后端的逻辑。
+如需体验更完善的评分功能，请在本地运行项目。后续计划将 GitHub Pages 的评分逻辑与后端同步。
 可选的 GitHub Token 只会发送给 `api.github.com`，不会保存到页面里。
 
 本地运行 Web 页面需要安装可选 Web 依赖：
