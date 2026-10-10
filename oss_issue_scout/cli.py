@@ -49,10 +49,11 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     search_parser = subparsers.add_parser("search", help="search GitHub issues")
-    search_parser.add_argument("--language")
+    search_parser.add_argument("--language", nargs="+")
     search_parser.add_argument("--query")
     search_parser.add_argument("--stars-min", type=int)
-    search_parser.add_argument("--label")
+    search_parser.add_argument("--stars-max", type=int)
+    search_parser.add_argument("--label", nargs="+")
     search_parser.add_argument("--updated-days", type=int)
     search_parser.add_argument("--repo-updated-days", type=int)
     search_parser.add_argument("--limit", type=_positive_int, default=6)
@@ -103,6 +104,7 @@ def _search_recommended(args: argparse.Namespace) -> list[ScoredIssue]:
         query=args.query,
         language=args.language,
         stars_min=args.stars_min,
+        stars_max=args.stars_max,
         label=args.label,
         updated_days=args.updated_days,
         repo_updated_days=args.repo_updated_days,
@@ -126,6 +128,7 @@ def _search_recommended(args: argparse.Namespace) -> list[ScoredIssue]:
             query=args.query,
             language=args.language,
             stars_min=args.stars_min,
+            stars_max=args.stars_max,
             label=args.label,
             updated_days=args.updated_days,
             repo_updated_days=args.repo_updated_days,
@@ -266,6 +269,7 @@ def _backfill_repo(
             known_issues=list(issues_by_url.values()),
             language=args.language,
             stars_min=args.stars_min,
+            stars_max=args.stars_max,
             label=args.label,
             updated_days=args.updated_days,
             repo_updated_days=args.repo_updated_days,

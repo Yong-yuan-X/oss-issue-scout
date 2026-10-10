@@ -483,6 +483,44 @@ class CliTests(unittest.TestCase):
             ["A1", "A2", "A3", "B1", "B2", "B3"],
         )
 
+    def test_search_passes_multiple_filters(self) -> None:
+        issue = _issue("Multiple filters")
+
+        with (
+            patch(
+                "oss_issue_scout.cli.search_issue_candidates",
+                return_value=IssueSearchResult(
+                    issues=[issue],
+                    exhausted=False,
+                    page_limit_reached=True,
+                ),
+            ) as search,
+            contextlib.redirect_stdout(io.StringIO()),
+        ):
+            exit_code = main(
+                [
+                    "search",
+                    "--language",
+                    "python",
+                    "rust",
+                    "--label",
+                    "good first issue",
+                    "help wanted",
+                    "--stars-max",
+                    "5000",
+                    "--limit",
+                    "1",
+                ]
+            )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(search.call_args.kwargs["language"], ["python", "rust"])
+        self.assertEqual(
+            search.call_args.kwargs["label"],
+            ["good first issue", "help wanted"],
+        )
+        self.assertEqual(search.call_args.kwargs["stars_max"], 5000)
+
     def test_search_handles_github_api_errors(self) -> None:
         stderr = io.StringIO()
 

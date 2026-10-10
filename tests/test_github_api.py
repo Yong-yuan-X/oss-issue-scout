@@ -12,6 +12,7 @@ from oss_issue_scout.github_api import (
     MAX_REST_SEARCH_PAGES,
     MIN_REPO_OPEN_ISSUES,
     _build_issue_query,
+    _build_repo_issue_query,
     _request_graphql,
     _request_json,
     backfill_issue_candidates,
@@ -150,6 +151,19 @@ class SearchIssuesTests(unittest.TestCase):
         self.assertEqual(search_call.args[1]["per_page"], "25")
         self.assertEqual([issue.repo for issue in issues], ["example/project"])
         self.assertEqual(request_json.call_count, 1)
+
+    def test_backfill_applies_max_stars(self) -> None:
+        with patch("oss_issue_scout.github_api._request_json", side_effect=_fake_rest) as request_json:
+            issues = backfill_issue_candidates(
+                repo="example/project",
+                stars_max=10_000,
+                per_page=25,
+                page=1,
+            )
+
+        search_call = request_json.call_args_list[0]
+        self.assertIn("stars:<=10000", search_call.args[1]["q"])
+        self.assertEqual(issues, [])
 
     def test_filters_by_min_stars_from_graphql_repo_data(self) -> None:
         with (
@@ -906,6 +920,133 @@ def _graphql_issue_node(
             "helpWantedIssues": {"totalCount": 0},
         },
     }
+
+
+
+class MultipleFilterTests(unittest.TestCase):
+    def test_query_supports_multiple_languages(self) -> None:
+        query = _build_issue_query(
+            language=["python", "rust"],
+            stars_min=None,
+            stars_max=None,
+            label=None,
+            updated_days=None,
+        )
+
+        self.assertIn("(language:python OR language:rust)", query)
+
+    def test_language_filter_accepts_six_languages(self) -> None:
+        languages = [
+            "python",
+            "rust",
+            "go",
+            "java",
+            "javascript",
+            "typescript",
+        ]
+
+        queries = [
+            _build_issue_query(
+                language=languages,
+                stars_min=None,
+                stars_max=None,
+                label=None,
+                updated_days=None,
+            ),
+            _build_repo_issue_query(
+                repo="example/project",
+                language=languages,
+                stars_max=None,
+                label=None,
+                updated_days=None,
+            ),
+        ]
+
+        for query in queries:
+            self.assertEqual(query.count(" OR "), 5)
+            self.assertEqual(query.count("language:"), 6)
+            for language in languages:
+                self.assertIn(f"language:{language}", query)
+
+    def test_query_rejects_more_than_six_languages(self) -> None:
+        languages = ["python", "rust", "go", "java", "javascript", "typescript", "swift"]
+        for builder, kwargs in (
+            (_build_issue_query, {"stars_min": None}),
+            (_build_repo_issue_query, {"repo": "example/project"}),
+        ):
+            with self.subTest(builder=builder.__name__):
+                with self.assertRaisesRegex(GitHubAPIError, "at most 6 language filters; received 7"):
+                    builder(
+                        language=languages,
+                        stars_max=None,
+                        label=None,
+                        updated_days=None,
+                        **kwargs,
+                    )
+
+    def test_global_search_rejects_excess_languages_before_request(self) -> None:
+        languages = ["python", "rust", "go", "java", "javascript", "typescript", "swift"]
+        for token in (None, "token"):
+            with (
+                self.subTest(token=token),
+                patch("oss_issue_scout.github_api._get_token", return_value=token),
+                patch("oss_issue_scout.github_api._request_graphql") as request_graphql,
+                patch("oss_issue_scout.github_api._request_json") as request_json,
+            ):
+                with self.assertRaisesRegex(GitHubAPIError, "at most 6 language filters; received 7"):
+                    search_issues(language=languages)
+
+                request_graphql.assert_not_called()
+                request_json.assert_not_called()
+
+    def test_repo_search_rejects_excess_languages_before_request(self) -> None:
+        languages = ["python", "rust", "go", "java", "javascript", "typescript", "swift"]
+        with patch("oss_issue_scout.github_api._request_json") as request_json:
+            with self.assertRaisesRegex(GitHubAPIError, "at most 6 language filters; received 7"):
+                backfill_issue_candidates(repo="example/project", language=languages)
+
+            request_json.assert_not_called()
+
+    def test_query_supports_multiple_labels(self) -> None:
+        query = _build_issue_query(
+            language=None,
+            stars_min=None,
+            stars_max=None,
+            label=["good first issue", "help wanted"],
+            updated_days=None,
+        )
+
+        self.assertIn('label:"good first issue","help wanted"', query)
+
+    def test_query_includes_max_stars(self) -> None:
+        query = _build_issue_query(
+            language=None,
+            stars_min=100,
+            stars_max=5000,
+            label=None,
+            updated_days=None,
+        )
+
+        self.assertIn("stars:>=100", query)
+        self.assertIn("stars:<=5000", query)
+
+    def test_filters_repositories_above_max_stars(self) -> None:
+        with (
+            patch("oss_issue_scout.github_api._get_token", return_value="token"),
+            patch("oss_issue_scout.github_api._request_graphql", side_effect=_fake_graphql),
+        ):
+            issues = search_issues(stars_max=10_000, limit=5)
+
+        self.assertEqual(issues, [])
+
+    def test_matches_any_selected_language(self) -> None:
+        with (
+            patch("oss_issue_scout.github_api._get_token", return_value="token"),
+            patch("oss_issue_scout.github_api._request_graphql", side_effect=_fake_graphql),
+        ):
+            issues = search_issues(language=["rust", "python"], limit=5)
+
+        self.assertEqual([issue.repo for issue in issues], ["example/project"])
 
 
 if __name__ == "__main__":

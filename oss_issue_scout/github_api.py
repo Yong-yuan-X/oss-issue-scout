@@ -116,9 +116,10 @@ class IssueSearchResult:
 
 def search_issues(
     *,
-    language: str | None = None,
+    language: str | list[str] | None = None,
     stars_min: int | None = None,
-    label: str | None = None,
+    stars_max: int | None = None,
+    label: str | list[str] | None = None,
     updated_days: int | None = None,
     repo_updated_days: int | None = None,
     exclude_repos: tuple[str, ...] = (),
@@ -128,6 +129,7 @@ def search_issues(
     return search_issue_candidates(
         language=language,
         stars_min=stars_min,
+        stars_max=stars_max,
         label=label,
         updated_days=updated_days,
         repo_updated_days=repo_updated_days,
@@ -139,9 +141,10 @@ def search_issues(
 def search_issue_candidates(
     *,
     query: str | None = None,
-    language: str | None = None,
+    language: str | list[str] | None = None,
     stars_min: int | None = None,
-    label: str | None = None,
+    stars_max: int | None = None,
+    label: str | list[str] | None = None,
     updated_days: int | None = None,
     repo_updated_days: int | None = None,
     exclude_repos: tuple[str, ...] = (),
@@ -157,6 +160,7 @@ def search_issue_candidates(
                 query=query,
                 language=language,
                 stars_min=stars_min,
+                stars_max=stars_max,
                 label=label,
                 updated_days=updated_days,
                 repo_updated_days=repo_updated_days,
@@ -174,6 +178,7 @@ def search_issue_candidates(
         query=query,
         language=language,
         stars_min=stars_min,
+        stars_max=stars_max,
         label=label,
         updated_days=updated_days,
         repo_updated_days=repo_updated_days,
@@ -188,9 +193,10 @@ def backfill_issue_candidates(
     *,
     repo: str,
     known_issues: list[Issue] | None = None,
-    language: str | None = None,
+    language: str | list[str] | None = None,
     stars_min: int | None = None,
-    label: str | None = None,
+    stars_max: int | None = None,
+    label: str | list[str] | None = None,
     updated_days: int | None = None,
     repo_updated_days: int | None = None,
     exclude_repos: tuple[str, ...] = (),
@@ -229,6 +235,7 @@ def backfill_issue_candidates(
                 "q": _build_repo_issue_query(
                     repo=repo,
                     language=language,
+                    stars_max=stars_max,
                     label=label,
                     updated_days=updated_days,
                 ),
@@ -252,6 +259,7 @@ def backfill_issue_candidates(
             exclude_repos=frozenset(),
             language=language,
             stars_min=effective_stars_min,
+            stars_max=stars_max,
             repo_updated_days=repo_updated_days,
             issues=issues,
             skipped=skipped,
@@ -269,9 +277,10 @@ def backfill_issue_candidates(
 def _search_issue_candidates_graphql(
     *,
     query: str | None = None,
-    language: str | None = None,
+    language: str | list[str] | None = None,
     stars_min: int | None = None,
-    label: str | None = None,
+    stars_max: int | None = None,
+    label: str | list[str] | None = None,
     updated_days: int | None = None,
     repo_updated_days: int | None = None,
     exclude_repos: set[str] = frozenset(),
@@ -288,6 +297,7 @@ def _search_issue_candidates_graphql(
         query=query,
         language=language,
         stars_min=effective_stars_min,
+        stars_max=stars_max,
         label=label,
         updated_days=updated_days,
         exclude_repos=exclude_repos,
@@ -337,7 +347,10 @@ def _search_issue_candidates_graphql(
             if issue.stars < effective_stars_min:
                 skipped["stars"] += 1
                 continue
-            if language and issue.language.casefold() != language.casefold():
+            if stars_max is not None and issue.stars > stars_max:
+                skipped["stars"] += 1
+                continue
+            if not _matches_filter(issue.language, language):
                 skipped["language"] += 1
                 continue
             if (
@@ -426,9 +439,10 @@ def _issue_from_graphql_node(node: Any) -> Issue | None:
 def _search_issue_candidates_rest(
     *,
     query: str | None = None,
-    language: str | None = None,
+    language: str | list[str] | None = None,
     stars_min: int | None = None,
-    label: str | None = None,
+    stars_max: int | None = None,
+    label: str | list[str] | None = None,
     updated_days: int | None = None,
     repo_updated_days: int | None = None,
     exclude_repos: set[str] = frozenset(),
@@ -445,6 +459,7 @@ def _search_issue_candidates_rest(
         query=query,
         language=language,
         stars_min=effective_stars_min,
+        stars_max=stars_max,
         label=label,
         updated_days=updated_days,
         exclude_repos=exclude_repos,
@@ -502,6 +517,7 @@ def _search_issue_candidates_rest(
                     exclude_repos=exclude_repos,
                     language=language,
                     stars_min=effective_stars_min,
+                    stars_max=stars_max,
                     repo_updated_days=repo_updated_days,
                     issues=issues,
                     skipped=skipped,
@@ -597,8 +613,9 @@ def _qualified_candidates(
     *,
     batch: list[tuple[dict[str, Any], str]],
     repo_cache: dict[str, dict[str, Any]],
-    language: str | None,
+    language: str | list[str] | None,
     stars_min: int,
+    stars_max: int | None,
 ) -> list[dict[str, Any]]:
     qualified: list[dict[str, Any]] = []
     for item, repo in batch:
@@ -606,9 +623,11 @@ def _qualified_candidates(
         stars = int(repo_info.get("stargazers_count") or 0)
         if stars < stars_min:
             continue
+        if stars_max is not None and stars > stars_max:
+            continue
 
         repo_language = str(repo_info.get("language") or "")
-        if language and repo_language.casefold() != language.casefold():
+        if not _matches_filter(repo_language, language):
             continue
 
         qualified.append(
@@ -633,8 +652,9 @@ def _append_rest_candidates(
     repo_open_issue_count_cache: dict[str, int],
     repo_beginner_issue_count_cache: dict[str, int],
     exclude_repos: set[str] = frozenset(),
-    language: str | None,
+    language: str | list[str] | None,
     stars_min: int,
+    stars_max: int | None,
     repo_updated_days: int | None,
     issues: list[Issue],
     skipped: Counter[str],
@@ -651,6 +671,7 @@ def _append_rest_candidates(
         repo_cache=repo_cache,
         language=language,
         stars_min=stars_min,
+        stars_max=stars_max,
     )
     skipped["metadata"] += len(candidates) - len(qualified)
     _load_repo_supplements(
@@ -792,9 +813,10 @@ def _load_repo_supplements(
 def _build_issue_query(
     *,
     query: str | None = None,
-    language: str | None,
+    language: str | list[str] | None,
     stars_min: int | None,
-    label: str | None,
+    stars_max: int | None = None,
+    label: str | list[str] | None,
     updated_days: int | None,
     exclude_repos: set[str] = frozenset(),
     sort_updated_desc: bool = False,
@@ -803,12 +825,24 @@ def _build_issue_query(
     parts = ["is:issue", "is:open", "archived:false", "-linked:pr", "no:assignee"]
     if query:
         parts.append(_quote_query_value(query))
-    if language:
-        parts.append(f"language:{_quote_query_value(language)}")
+    languages = _filter_values(language)
+    if len(languages) > 6:
+        raise GitHubAPIError(
+            f"GitHub search supports at most 6 language filters; received {len(languages)}."
+        )
+    if len(languages) == 1:
+        parts.append(f"language:{_quote_query_value(languages[0])}")
+    elif languages:
+        parts.append("(" + " OR ".join(f"language:{_quote_query_value(value)}" for value in languages) + ")")
     if stars_min is not None:
         parts.append(f"stars:>={stars_min}")
-    if label:
-        parts.append(f"label:{_quote_query_value(label)}")
+    if stars_max is not None:
+        parts.append(f"stars:<={stars_max}")
+    labels = _filter_values(label)
+    if len(labels) == 1:
+        parts.append(f"label:{_quote_query_value(labels[0])}")
+    elif labels:
+        parts.append("label:" + ",".join(_quote_query_value(value) for value in labels))
     if updated_days is not None:
         cutoff = datetime.now(timezone.utc).date() - timedelta(days=updated_days)
         parts.append(f"updated:>={cutoff.isoformat()}")
@@ -822,8 +856,9 @@ def _build_issue_query(
 def _build_repo_issue_query(
     *,
     repo: str,
-    language: str | None,
-    label: str | None,
+    language: str | list[str] | None,
+    stars_max: int | None,
+    label: str | list[str] | None,
     updated_days: int | None,
 ) -> str:
     """Build a GitHub search query string scoped to a single repository."""
@@ -834,10 +869,22 @@ def _build_repo_issue_query(
         "-linked:pr",
         "no:assignee",
     ]
-    if language:
-        parts.append(f"language:{_quote_query_value(language)}")
-    if label:
-        parts.append(f"label:{_quote_query_value(label)}")
+    languages = _filter_values(language)
+    if len(languages) > 6:
+        raise GitHubAPIError(
+            f"GitHub search supports at most 6 language filters; received {len(languages)}."
+        )
+    if len(languages) == 1:
+        parts.append(f"language:{_quote_query_value(languages[0])}")
+    elif languages:
+        parts.append("(" + " OR ".join(f"language:{_quote_query_value(value)}" for value in languages) + ")")
+    if stars_max is not None:
+        parts.append(f"stars:<={stars_max}")
+    labels = _filter_values(label)
+    if len(labels) == 1:
+        parts.append(f"label:{_quote_query_value(labels[0])}")
+    elif labels:
+        parts.append("label:" + ",".join(_quote_query_value(value) for value in labels))
     if updated_days is not None:
         cutoff = datetime.now(timezone.utc).date() - timedelta(days=updated_days)
         parts.append(f"updated:>={cutoff.isoformat()}")
@@ -1157,6 +1204,17 @@ def _days_since(value: str) -> int:
     delta = datetime.now(timezone.utc) - timestamp
     return max(delta.days, 0)
 
+
+def _filter_values(value: str | list[str] | None) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    if isinstance(value, str):
+        value = [value]
+    return tuple(item.strip() for item in value if item.strip())
+
+def _matches_filter(value: str, filters: str | list[str] | None) -> bool:
+    allowed = _filter_values(filters)
+    return not allowed or value.casefold() in {item.casefold() for item in allowed}
 
 def _quote_query_value(value: str) -> str:
     if not value.replace("_", "").replace("-", "").isalnum():

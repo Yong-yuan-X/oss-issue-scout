@@ -34,6 +34,7 @@ def search():
         language = request.args.get('language', '')
         label = request.args.get('label', '')
         stars_min = request.args.get('stars_min', '')
+        stars_max = request.args.get('stars_max', '')
         limit = request.args.get('limit', '5')
         preset = request.args.get('preset', 'default')
         updated_days = request.args.get('updated_days', '')
@@ -45,6 +46,7 @@ def search():
         args_obj = argparse.Namespace()
         args_obj.language = language if language else None
         args_obj.stars_min = validate_int(stars_min, 'stars_min')
+        args_obj.stars_max = validate_int(stars_max, 'stars_max')
         args_obj.label = label if label else None
         args_obj.updated_days = validate_int(updated_days, 'updated_days')
         args_obj.repo_updated_days = validate_int(repo_updated_days, 'repo_updated_days')

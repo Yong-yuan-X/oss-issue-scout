@@ -13,7 +13,7 @@ It is currently aimed at junior to intermediate developers who want a faster way
 ## Features
 
 - Search GitHub open issues with selectable scoring presets
-- Filter by language, label, stars, and update recency
+- Filter by one or more languages and labels, repository star range, and update recency
 - Skip issues that already have linked PRs
 - Recommend only unassigned issues by default
 - Skip repositories with fewer than 100 stars by default
@@ -67,9 +67,10 @@ The script starts the backend API at `http://localhost:5000`, serves the fronten
 ## Options
 
 ```text
---language            Repository primary language, such as python or c++; default: no language filter
+--language            One or more repository primary languages (maximum 6), such as python rust; default: no language filter
 --stars-min           Minimum repository stars; defaults to at least 100
---label               Issue label, such as "good first issue" or "bug"; default: no label filter
+--stars-max           Maximum repository stars; default: no maximum
+--label               One or more issue labels; multiple values match any label; default: no label filter
 --updated-days        Issue updated within the last N days; default: no limit
 --repo-updated-days   Repository had issue activity within the last N days; default: no limit
 --exclude-repo        Exclude a repository (owner/name) from results; can be repeated; default: none
@@ -78,12 +79,15 @@ The script starts the backend API at `http://localhost:5000`, serves the fronten
 --format              Output format: table, markdown, json; default: table
 ```
 
+Multiple languages match any selected language. Providing more than 6 language filters returns an error.
+
 Examples:
 
 ```powershell
 oss-issue-scout search
 oss-issue-scout search --language python
 oss-issue-scout search --language python --label "help wanted" --stars-min 500 --limit 5
+oss-issue-scout search --language python rust --label "good first issue" "help wanted" --stars-min 500 --stars-max 10000 --limit 5
 oss-issue-scout search --language rust --format json
 oss-issue-scout search --language "C++" --label "good first issue" --repo-updated-days 7
 oss-issue-scout search --language c --preset intermediate --limit 10

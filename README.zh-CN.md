@@ -11,7 +11,7 @@
 ## 功能
 
 - 搜索 GitHub open issues，并支持用户选择预设
-- 支持按语言、标签、stars、更新时间过滤
+- 支持按一个或多个语言和标签、仓库 stars 范围、更新时间过滤
 - 默认跳过已有关联 PR 的 issue
 - 默认只推荐未指派的 issue
 - 默认过滤 stars 少于 100 的 repo
@@ -64,9 +64,10 @@ Windows 可以一键启动前后端服务：
 ## 参数
 
 ```text
---language            仓库主要语言，例如 python、c++；默认不限制语言
+--language            一个或多个仓库主要语言，例如 python rust；最多 6 个；默认不限制语言
 --stars-min           仓库最低 stars；默认至少 100
---label               issue 标签，例如 "good first issue"、"bug"；默认不限制标签
+--stars-max           仓库最高 stars；默认不限制上限
+--label               一个或多个 issue 标签；多个值匹配任一标签；默认不限制标签
 --updated-days        当前 issue 最近多少天内更新过；默认不限制
 --repo-updated-days   issue 所在 repo 最近多少天内有 issue 活动；默认不限制
 --exclude-repo        排除指定仓库 (owner/name)；可多次使用；默认不排除
@@ -75,12 +76,15 @@ Windows 可以一键启动前后端服务：
 --format              输出格式：table、markdown、json；默认 table
 ```
 
+多个语言匹配任一所选语言；超过 6 个语言过滤器会报错。
+
 示例：
 
 ```powershell
 oss-issue-scout search
 oss-issue-scout search --language python
 oss-issue-scout search --language python --label "help wanted" --stars-min 500 --limit 5
+oss-issue-scout search --language python rust --label "good first issue" "help wanted" --stars-min 500 --stars-max 10000 --limit 5
 oss-issue-scout search --language rust --format json
 oss-issue-scout search --language "C++" --label "good first issue" --repo-updated-days 7
 oss-issue-scout search --language c --preset intermediate --limit 10

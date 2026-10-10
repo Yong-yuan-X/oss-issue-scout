@@ -30,6 +30,14 @@ class WebApiTests(unittest.TestCase):
         self.assertEqual(search.call_args.args[0].exclude_repo, ["django/django", "pandas-dev/pandas"])
 
     @patch("web.api._search_recommended", return_value=[])
+    def test_search_without_stars_max_uses_none(self, search) -> None:
+        response = self.client.get("/api/search?stars_min=100")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(search.call_args.args[0].stars_min, 100)
+        self.assertIsNone(search.call_args.args[0].stars_max)
+
+    @patch("web.api._search_recommended", return_value=[])
     def test_search_rejects_non_integer_repo_updated_days(self, search) -> None:
         response = self.client.get("/api/search?repo_updated_days=recent")
 
